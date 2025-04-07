@@ -5,6 +5,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
         SELECT
           Id,
           AccountId,
+          Pricebook2Id,
           (SELECT Id, UnitPrice, Quantity, PricebookEntryId FROM OrderItems)
         FROM Order
         WHERE Status = 'Activated'
@@ -17,28 +18,19 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
     List<OrderItem> orderItemsToUpdate = new List<OrderItem>();
     List<Order> ordersToUpdate = new List<Order>();
 
-    // Récupérer les nouveaux prix des produits
-    Map<Id, PricebookEntry> pricebookEntriesMap = new Map<Id, PricebookEntry>(
-      [
-        SELECT Id, UnitPrice, Product2Id
-        FROM PricebookEntry
-        WHERE
-          Pricebook2Id = :[
-            SELECT Id
-            FROM Pricebook2
-            WHERE IsStandard = TRUE
-            LIMIT 1
-          ]
-          .Id
-      ]
-    );
-
-    // Log des PricebookEntry récupérés
-    System.debug('PricebookEntries retrieved: ' + pricebookEntriesMap.keySet());
-
-    // Mettre à jour les OrderItems et recalculer le CustomTotalAmount
+    // Mettre à jour les OrderItem et recalculer le CustomTotalAmount
     for (Order order : scope) {
       Decimal newTotalAmount = 0;
+
+      // Récupérer les nouveaux prix des produits pour le catalogue actif de la commande
+      Map<Id, PricebookEntry> pricebookEntriesMap = new Map<Id, PricebookEntry>(
+        [
+          SELECT Id, UnitPrice, Product2Id
+          FROM PricebookEntry
+          WHERE Pricebook2Id = :order.Pricebook2Id
+        ]
+      );
+
       for (OrderItem item : order.OrderItems) {
         System.debug(
           'Processing OrderItem ID: ' +
@@ -62,7 +54,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
         }
       }
 
-      // Mettre à jour le champ CustomTotalAmount de l'Order
+      // Mettre à jour le champ personnalisé sur l'objet Order
       order.CustomTotalAmount__c = newTotalAmount;
       ordersToUpdate.add(order);
 
@@ -77,12 +69,10 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
       }
     }
 
-    // Mettre à jour les OrderItems
+    // Mettre à jour les OrderItem et les Order
     if (!orderItemsToUpdate.isEmpty()) {
       update orderItemsToUpdate;
     }
-
-    // Mettre à jour les orders
     if (!ordersToUpdate.isEmpty()) {
       update ordersToUpdate;
     }
@@ -101,6 +91,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
   }
 
   public void finish(Database.BatchableContext BC) {
+    // Actions à effectuer après le traitement de tous les lots
     System.debug('Batch processing complete.');
   }
 }
