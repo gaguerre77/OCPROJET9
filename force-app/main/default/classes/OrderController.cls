@@ -1,16 +1,16 @@
 public with sharing class OrderController {
-  @AuraEnabled(cacheable=true)
+  @AuraEnabled
   public static Decimal getSumOrdersOfAccount(Id accountId) {
-    // Calculer la somme des montants des commandes pour le compte donné
-    List<Order> orders = [
-      SELECT TotalAmount
+    // Utilisation d'une requête agrégée pour calculer la somme côté base de données
+    AggregateResult result = [
+      SELECT SUM(TotalAmount) sumTotal
       FROM Order
-      WHERE AccountId = :accountId AND Status = 'Activated' // Filtrer par Statut Activated
+      WHERE AccountId = :accountId AND Status = 'Activated'
     ];
-    Decimal sum = 0;
-    for (Order order : orders) {
-      sum += order.TotalAmount;
-    }
-    return sum;
+
+    // Si aucune commande n'est trouvée, retourner 0
+    return result.get('sumTotal') != null
+      ? (Decimal) result.get('sumTotal')
+      : 0;
   }
 }
