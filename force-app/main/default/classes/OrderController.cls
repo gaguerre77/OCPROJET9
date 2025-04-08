@@ -5,7 +5,7 @@ public with sharing class OrderController {
     List<Order> orders = [
       SELECT TotalAmount
       FROM Order
-      WHERE AccountId = :accountId
+      WHERE AccountId = :accountId AND Status = 'Activated' // Filtrer par Statut Activated
     ];
     Decimal sum = 0;
     for (Order order : orders) {
