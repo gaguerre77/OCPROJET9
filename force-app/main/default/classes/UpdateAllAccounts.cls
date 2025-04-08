@@ -17,44 +17,50 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
     Map<Id, Decimal> accountTotalMap = new Map<Id, Decimal>();
     List<OrderItem> orderItemsToUpdate = new List<OrderItem>();
     List<Order> ordersToUpdate = new List<Order>();
+    Set<Id> pricebookIds = new Set<Id>();
 
-    // Mettre à jour les OrderItem et recalculer le CustomTotalAmount
+    // Collecter les Pricebook2Id nécessaires
+    for (Order order : scope) {
+      pricebookIds.add(order.Pricebook2Id);
+    }
+
+    // Récupérer tous les PricebookEntry nécessaires pour les Pricebook2Id
+    Map<Id, List<PricebookEntry>> pricebookEntriesMap = new Map<Id, List<PricebookEntry>>();
+    for (PricebookEntry pbe : [
+      SELECT Id, Pricebook2Id, Product2Id, UnitPrice
+      FROM PricebookEntry
+      WHERE Pricebook2Id IN :pricebookIds
+    ]) {
+      if (!pricebookEntriesMap.containsKey(pbe.Pricebook2Id)) {
+        pricebookEntriesMap.put(pbe.Pricebook2Id, new List<PricebookEntry>());
+      }
+      pricebookEntriesMap.get(pbe.Pricebook2Id).add(pbe);
+    }
+
+    // Traiter chaque commande et ses OrderItems
     for (Order order : scope) {
       Decimal newTotalAmount = 0;
 
-      // Récupérer les nouveaux prix des produits pour le catalogue actif de la commande
-      Map<Id, PricebookEntry> pricebookEntriesMap = new Map<Id, PricebookEntry>(
-        [
-          SELECT Id, UnitPrice, Product2Id
-          FROM PricebookEntry
-          WHERE Pricebook2Id = :order.Pricebook2Id
-        ]
-      );
+      // Récupérer les PricebookEntry associés à cette commande
+      Map<Id, PricebookEntry> orderPricebookEntries = new Map<Id, PricebookEntry>();
+      for (PricebookEntry pbe : pricebookEntriesMap.get(order.Pricebook2Id)) {
+        orderPricebookEntries.put(pbe.Id, pbe);
+      }
 
+      // Mettre à jour les OrderItems et recalculer le CustomTotalAmount
       for (OrderItem item : order.OrderItems) {
-        System.debug(
-          'Processing OrderItem ID: ' +
-            item.Id +
-            ' with PricebookEntryId: ' +
-            item.PricebookEntryId
-        );
-        PricebookEntry pricebookEntry = pricebookEntriesMap.get(
+        PricebookEntry pricebookEntry = orderPricebookEntries.get(
           item.PricebookEntryId
         );
         if (pricebookEntry != null) {
           Decimal newPrice = pricebookEntry.UnitPrice;
-          System.debug(
-            'Updating OrderItem ID: ' + item.Id + ' with new price: ' + newPrice
-          );
           item.UnitPrice = newPrice;
           newTotalAmount += newPrice * item.Quantity;
           orderItemsToUpdate.add(item);
-        } else {
-          System.debug('PricebookEntry not found for OrderItem ID: ' + item.Id);
         }
       }
 
-      // Mettre à jour le champ personnalisé sur l'objet Order
+      // Mettre à jour le champ CustomTotalAmount sur l'objet Order
       order.CustomTotalAmount__c = newTotalAmount;
       ordersToUpdate.add(order);
 
@@ -69,7 +75,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
       }
     }
 
-    // Mettre à jour les OrderItem et les Order
+    // Mettre à jour les OrderItems et les Orders
     if (!orderItemsToUpdate.isEmpty()) {
       update orderItemsToUpdate;
     }
@@ -87,7 +93,10 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
       accountsToUpdate.add(acc);
     }
 
-    update accountsToUpdate;
+    // Mettre à jour les comptes
+    if (!accountsToUpdate.isEmpty()) {
+      update accountsToUpdate;
+    }
   }
 
   public void finish(Database.BatchableContext BC) {
