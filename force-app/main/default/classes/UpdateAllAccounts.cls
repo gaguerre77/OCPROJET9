@@ -9,7 +9,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
           Pricebook2Id,
           (SELECT Id, UnitPrice, Quantity, PricebookEntryId FROM OrderItems)
         FROM Order
-        WHERE Status = 'Activated'
+        WHERE Status IN ('Activated', 'Draft')
       ]
     );
   }
