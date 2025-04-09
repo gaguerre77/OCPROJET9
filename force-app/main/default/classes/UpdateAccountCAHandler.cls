@@ -4,8 +4,9 @@ public class UpdateAccountCAHandler {
     Map<Id, Order> oldOrdersMap
   ) {
     Set<Id> accountIds = new Set<Id>();
+    Set<Id> orderIds = new Set<Id>();
 
-    // Identifier les comptes dont le statut de commande est passé de Draft à Activated
+    // Identifier les comptes concernés par un changement Draft → Activated
     for (Order newOrder : newOrders) {
       Order oldOrder = oldOrdersMap.get(newOrder.Id);
 
@@ -19,32 +20,53 @@ public class UpdateAccountCAHandler {
       }
     }
 
-    if (accountIds.isEmpty()) {
+    if (accountIds.isEmpty())
       return;
-    }
 
-    // Récupérer les comptes à mettre à jour
-    Map<Id, Account> accountsMap = new Map<Id, Account>(
-      [SELECT Id, Chiffre_d_affaire__c FROM Account WHERE Id IN :accountIds]
-    );
-
-    // Agréger les montants des commandes activées par compte
-    List<AggregateResult> aggregatedOrders = [
-      SELECT AccountId, SUM(CustomTotalAmount__c) total
+    // Récupérer les commandes activées des comptes concernés
+    List<Order> activatedOrders = [
+      SELECT Id, AccountId
       FROM Order
-      WHERE AccountId IN :accountIds AND Status = 'Activated'
-      GROUP BY AccountId
+      WHERE Status = 'Activated' AND AccountId IN :accountIds
     ];
 
-    for (AggregateResult ar : aggregatedOrders) {
-      Id accId = (Id) ar.get('AccountId');
-      Decimal total = (Decimal) ar.get('total');
+    for (Order o : activatedOrders) {
+      orderIds.add(o.Id);
+    }
 
-      if (accountsMap.containsKey(accId)) {
-        accountsMap.get(accId).Chiffre_d_affaire__c = total;
+    if (orderIds.isEmpty())
+      return;
+
+    // Récupérer tous les OrderItems liés aux commandes activées
+    List<OrderItem> items = [
+      SELECT Id, Order.AccountId, Quantity, UnitPrice
+      FROM OrderItem
+      WHERE OrderId IN :orderIds
+    ];
+
+    // Calculer les totaux par compte
+    Map<Id, Decimal> accountTotals = new Map<Id, Decimal>();
+    for (OrderItem item : items) {
+      Id accId = item.Order.AccountId;
+      Decimal total = item.UnitPrice * item.Quantity;
+
+      if (!accountTotals.containsKey(accId)) {
+        accountTotals.put(accId, total);
+      } else {
+        accountTotals.put(accId, accountTotals.get(accId) + total);
       }
     }
 
-    update accountsMap.values();
+    // Mettre à jour les comptes
+    List<Account> accountsToUpdate = new List<Account>();
+    for (Id accId : accountTotals.keySet()) {
+      accountsToUpdate.add(
+        new Account(Id = accId, Chiffre_d_affaire__c = accountTotals.get(accId))
+      );
+    }
+
+    if (!accountsToUpdate.isEmpty()) {
+      update accountsToUpdate;
+    }
   }
 }
