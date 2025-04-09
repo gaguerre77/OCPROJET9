@@ -1,5 +1,6 @@
 public class UpdateAllAccounts implements Database.Batchable<SObject> {
   public Database.QueryLocator start(Database.BatchableContext BC) {
+    System.debug('🚀 Démarrage du batch UpdateAllAccounts');
     return Database.getQueryLocator(
       [
         SELECT
@@ -14,6 +15,8 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
   }
 
   public void execute(Database.BatchableContext BC, List<Order> scope) {
+    System.debug('📦 Traitement d\'un lot de ' + scope.size() + ' commandes');
+
     Map<Id, Decimal> accountTotalMap = new Map<Id, Decimal>();
     List<OrderItem> orderItemsToUpdate = new List<OrderItem>();
     List<Order> ordersToUpdate = new List<Order>();
@@ -23,8 +26,9 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
     for (Order order : scope) {
       pricebookIds.add(order.Pricebook2Id);
     }
+    System.debug('🔎 Pricebook2 à charger : ' + pricebookIds);
 
-    // Récupérer tous les PricebookEntry nécessaires pour les Pricebook2Id
+    // Récupérer tous les PricebookEntry nécessaires
     Map<Id, List<PricebookEntry>> pricebookEntriesMap = new Map<Id, List<PricebookEntry>>();
     for (PricebookEntry pbe : [
       SELECT Id, Pricebook2Id, Product2Id, UnitPrice
@@ -36,35 +40,54 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
       }
       pricebookEntriesMap.get(pbe.Pricebook2Id).add(pbe);
     }
+    System.debug('📘 PricebookEntry chargés : ' + pricebookEntriesMap.size());
 
-    // Traiter chaque commande et ses OrderItems
     for (Order order : scope) {
       Decimal newTotalAmount = 0;
 
-      // Récupérer les PricebookEntry associés à cette commande
+      System.debug('🧾 Traitement de la commande ' + order.Id);
+
       Map<Id, PricebookEntry> orderPricebookEntries = new Map<Id, PricebookEntry>();
-      for (PricebookEntry pbe : pricebookEntriesMap.get(order.Pricebook2Id)) {
-        orderPricebookEntries.put(pbe.Id, pbe);
+      if (pricebookEntriesMap.containsKey(order.Pricebook2Id)) {
+        for (PricebookEntry pbe : pricebookEntriesMap.get(order.Pricebook2Id)) {
+          orderPricebookEntries.put(pbe.Id, pbe);
+        }
       }
 
-      // Mettre à jour les OrderItems et recalculer le CustomTotalAmount
       for (OrderItem item : order.OrderItems) {
         PricebookEntry pricebookEntry = orderPricebookEntries.get(
           item.PricebookEntryId
         );
         if (pricebookEntry != null) {
           Decimal newPrice = pricebookEntry.UnitPrice;
+          Decimal lineTotal = newPrice * item.Quantity;
           item.UnitPrice = newPrice;
-          newTotalAmount += newPrice * item.Quantity;
+          newTotalAmount += lineTotal;
           orderItemsToUpdate.add(item);
+
+          System.debug(
+            '  🛒 OrderItem ' +
+              item.Id +
+              ' : ' +
+              item.Quantity +
+              ' x ' +
+              newPrice +
+              ' = ' +
+              lineTotal
+          );
+        } else {
+          System.debug(
+            '  ⚠️ PricebookEntry non trouvé pour OrderItem ' + item.Id
+          );
         }
       }
 
-      // Mettre à jour le champ CustomTotalAmount sur l'objet Order
       order.CustomTotalAmount__c = newTotalAmount;
       ordersToUpdate.add(order);
+      System.debug(
+        '✅ Total recalculé pour Order ' + order.Id + ' : ' + newTotalAmount
+      );
 
-      // Ajouter au total pour le compte
       if (accountTotalMap.containsKey(order.AccountId)) {
         accountTotalMap.put(
           order.AccountId,
@@ -75,7 +98,11 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
       }
     }
 
-    // Mettre à jour les OrderItems et les Orders
+    System.debug(
+      '💾 OrderItems à mettre à jour : ' + orderItemsToUpdate.size()
+    );
+    System.debug('💾 Orders à mettre à jour : ' + ordersToUpdate.size());
+
     if (!orderItemsToUpdate.isEmpty()) {
       update orderItemsToUpdate;
     }
@@ -83,24 +110,24 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
       update ordersToUpdate;
     }
 
-    // Mettre à jour les comptes
     List<Account> accountsToUpdate = new List<Account>();
     for (Id accountId : accountTotalMap.keySet()) {
-      Account acc = new Account(
-        Id = accountId,
-        Chiffre_d_affaire__c = accountTotalMap.get(accountId)
+      Decimal totalCA = accountTotalMap.get(accountId);
+      accountsToUpdate.add(
+        new Account(Id = accountId, Chiffre_d_affaire__c = totalCA)
       );
-      accountsToUpdate.add(acc);
+      System.debug('📈 Compte ' + accountId + ' → nouveau CA : ' + totalCA);
     }
 
-    // Mettre à jour les comptes
     if (!accountsToUpdate.isEmpty()) {
       update accountsToUpdate;
+      System.debug(
+        '✅ Mise à jour de ' + accountsToUpdate.size() + ' comptes terminée.'
+      );
     }
   }
 
   public void finish(Database.BatchableContext BC) {
-    // Actions à effectuer après le traitement de tous les lots
-    System.debug('Batch processing complete.');
+    System.debug('🎉 Batch UpdateAllAccounts terminé avec succès.');
   }
 }
