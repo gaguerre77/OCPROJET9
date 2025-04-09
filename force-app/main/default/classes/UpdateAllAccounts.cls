@@ -7,6 +7,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
           Id,
           AccountId,
           Pricebook2Id,
+          Status, // Include the Status field here
           (SELECT Id, UnitPrice, Quantity, PricebookEntryId FROM OrderItems)
         FROM Order
         WHERE Status IN ('Activated', 'Draft')
@@ -19,7 +20,6 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
 
     Map<Id, Decimal> accountTotalMap = new Map<Id, Decimal>();
     List<OrderItem> orderItemsToUpdate = new List<OrderItem>();
-    List<Order> ordersToUpdate = new List<Order>();
     Set<Id> pricebookIds = new Set<Id>();
 
     // Collecter les Pricebook2Id nécessaires
@@ -82,32 +82,29 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
         }
       }
 
-      order.CustomTotalAmount__c = newTotalAmount;
-      ordersToUpdate.add(order);
-      System.debug(
-        '✅ Total recalculé pour Order ' + order.Id + ' : ' + newTotalAmount
-      );
-
-      if (accountTotalMap.containsKey(order.AccountId)) {
-        accountTotalMap.put(
-          order.AccountId,
-          accountTotalMap.get(order.AccountId) + newTotalAmount
+      // Calculer le chiffre d'affaires uniquement pour les commandes 'Activated'
+      if (order.Status == 'Activated') {
+        System.debug(
+          '✅ Total recalculé pour Order ' + order.Id + ' : ' + newTotalAmount
         );
-      } else {
-        accountTotalMap.put(order.AccountId, newTotalAmount);
+
+        if (accountTotalMap.containsKey(order.AccountId)) {
+          accountTotalMap.put(
+            order.AccountId,
+            accountTotalMap.get(order.AccountId) + newTotalAmount
+          );
+        } else {
+          accountTotalMap.put(order.AccountId, newTotalAmount);
+        }
       }
     }
 
     System.debug(
       '💾 OrderItems à mettre à jour : ' + orderItemsToUpdate.size()
     );
-    System.debug('💾 Orders à mettre à jour : ' + ordersToUpdate.size());
 
     if (!orderItemsToUpdate.isEmpty()) {
       update orderItemsToUpdate;
-    }
-    if (!ordersToUpdate.isEmpty()) {
-      update ordersToUpdate;
     }
 
     List<Account> accountsToUpdate = new List<Account>();
