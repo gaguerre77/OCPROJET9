@@ -8,6 +8,7 @@ public with sharing class OrderController {
       WHERE AccountId = :accountId AND Status = 'Activated'
     ];
 
+    //top
     // Si aucune commande n'est trouvée, retourner 0
     return result.get('sumTotal') != null
       ? (Decimal) result.get('sumTotal')
