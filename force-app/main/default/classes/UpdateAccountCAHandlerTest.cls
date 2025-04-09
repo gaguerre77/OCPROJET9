@@ -2,15 +2,16 @@
 public class UpdateAccountCAHandlerTest {
   @TestSetup
   static void setupTestData() {
-    // Crée un compte, produit, PBE, et deux commandes Draft via la factory
+    // Créer un compte, produit, PBE et 2 commandes Draft via la factory
     TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
       2
     );
     List<Order> orders = data.orders;
 
-    // Créer les lignes de commandes pour chaque Order
+    // Ajouter des OrderItems pour calculer automatiquement le TotalAmount
+
+    // Commande 1 : 1 x 100 + 2 x 150 = 400
     List<OrderItem> items = new List<OrderItem>{
-      // Commande 1 : 1 x 100 + 2 x 150 = 400
       new OrderItem(
         OrderId = orders[0].Id,
         PricebookEntryId = data.pricebookEntryId,
@@ -23,7 +24,7 @@ public class UpdateAccountCAHandlerTest {
         Quantity = 2,
         UnitPrice = 150
       ),
-      // Commande 2 : 3 x 200 = 600 (non activée dans ce test)
+      // Commande 2 : 3 x 200 = 600
       new OrderItem(
         OrderId = orders[1].Id,
         PricebookEntryId = data.pricebookEntryId,
@@ -33,11 +34,13 @@ public class UpdateAccountCAHandlerTest {
     };
 
     insert items;
+
+    // TotalAmount sera automatiquement calculé par Salesforce après insertion des OrderItems
   }
 
   @isTest
-  static void testChiffreAffaireRecalculatedOnActivation() {
-    // Récupérer les commandes créées
+  static void testChiffreAffaireAvecTotalAmount() {
+    // Récupérer les commandes
     List<Order> orders = [
       SELECT Id, Status, AccountId
       FROM Order
@@ -48,7 +51,7 @@ public class UpdateAccountCAHandlerTest {
     Order orderToActivate = orders[0];
     Order oldOrder = orderToActivate.clone(false, false, false, false);
 
-    // Activer la commande
+    // Activer la commande (commande 1 : TotalAmount = 400)
     orderToActivate.Status = 'Activated';
 
     Test.startTest();
@@ -59,7 +62,7 @@ public class UpdateAccountCAHandlerTest {
     );
     Test.stopTest();
 
-    // Vérification du CA = 400 (100×1 + 150×2)
+    // Vérifier que le CA du compte est bien égal à TotalAmount de la commande activée
     Account acc = [
       SELECT Chiffre_d_affaire__c
       FROM Account
@@ -67,18 +70,19 @@ public class UpdateAccountCAHandlerTest {
       LIMIT 1
     ];
 
+    Decimal expected = 400;
     System.debug(
-      '✅ CA attendu : 400 | CA calculé : ' + acc.Chiffre_d_affaire__c
+      '✅ CA attendu : ' + expected + ' | CA réel : ' + acc.Chiffre_d_affaire__c
     );
     System.assertEquals(
-      400,
+      expected,
       acc.Chiffre_d_affaire__c,
-      '❌ Le chiffre d\'affaire devrait être 400 après activation.'
+      '❌ Le CA ne correspond pas au TotalAmount de la commande.'
     );
   }
 
   @isTest
-  static void testNoRecalculationIfStatusUnchanged() {
+  static void testStatutInchangeNeModifiePasCA() {
     List<Order> orders = [
       SELECT Id, Status, AccountId
       FROM Order
@@ -86,7 +90,7 @@ public class UpdateAccountCAHandlerTest {
       LIMIT 2
     ];
 
-    Order unchangedOrder = orders[1];
+    Order unchangedOrder = orders[1]; // reste en Draft
 
     Test.startTest();
     UpdateAccountCAHandler.handleAfterUpdate(
@@ -108,7 +112,7 @@ public class UpdateAccountCAHandlerTest {
     System.assertEquals(
       0,
       actualCA,
-      '❌ Le CA ne doit pas être modifié sans changement de statut.'
+      '❌ Le CA ne doit pas être modifié si le statut ne change pas.'
     );
   }
 }

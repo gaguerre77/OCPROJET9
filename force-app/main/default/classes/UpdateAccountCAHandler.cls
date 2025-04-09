@@ -4,12 +4,9 @@ public class UpdateAccountCAHandler {
     Map<Id, Order> oldOrdersMap
   ) {
     Set<Id> accountIds = new Set<Id>();
-    Set<Id> orderIds = new Set<Id>();
 
-    // Identifier les comptes concernés par un changement Draft → Activated
     for (Order newOrder : newOrders) {
       Order oldOrder = oldOrdersMap.get(newOrder.Id);
-
       if (
         oldOrder != null &&
         oldOrder.Status == 'Draft' &&
@@ -23,50 +20,31 @@ public class UpdateAccountCAHandler {
     if (accountIds.isEmpty())
       return;
 
-    // Récupérer les commandes activées des comptes concernés
-    List<Order> activatedOrders = [
-      SELECT Id, AccountId
+    // Agrégation directe du TotalAmount des commandes activées
+    List<AggregateResult> results = [
+      SELECT AccountId, SUM(TotalAmount) total
       FROM Order
       WHERE Status = 'Activated' AND AccountId IN :accountIds
+      GROUP BY AccountId
     ];
 
-    for (Order o : activatedOrders) {
-      orderIds.add(o.Id);
-    }
-
-    if (orderIds.isEmpty())
-      return;
-
-    // Récupérer tous les OrderItems liés aux commandes activées
-    List<OrderItem> items = [
-      SELECT Id, Order.AccountId, Quantity, UnitPrice
-      FROM OrderItem
-      WHERE OrderId IN :orderIds
-    ];
-
-    // Calculer les totaux par compte
     Map<Id, Decimal> accountTotals = new Map<Id, Decimal>();
-    for (OrderItem item : items) {
-      Id accId = item.Order.AccountId;
-      Decimal total = item.UnitPrice * item.Quantity;
-
-      if (!accountTotals.containsKey(accId)) {
-        accountTotals.put(accId, total);
-      } else {
-        accountTotals.put(accId, accountTotals.get(accId) + total);
-      }
+    for (AggregateResult ar : results) {
+      Id accId = (Id) ar.get('AccountId');
+      Decimal total = (Decimal) ar.get('total');
+      accountTotals.put(accId, total != null ? total : 0);
     }
 
-    // Mettre à jour les comptes
-    List<Account> accountsToUpdate = new List<Account>();
+    // Mise à jour des comptes
+    List<Account> updates = new List<Account>();
     for (Id accId : accountTotals.keySet()) {
-      accountsToUpdate.add(
+      updates.add(
         new Account(Id = accId, Chiffre_d_affaire__c = accountTotals.get(accId))
       );
     }
 
-    if (!accountsToUpdate.isEmpty()) {
-      update accountsToUpdate;
+    if (!updates.isEmpty()) {
+      update updates;
     }
   }
 }
