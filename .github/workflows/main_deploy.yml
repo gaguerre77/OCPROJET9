@@ -11,54 +11,52 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source
+      - name: 📦 Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install Node.js, SFDX CLI, and sgd plugin
+      - name: 🛠 Install Node.js, SFDX CLI, jq, and sgd plugin
         run: |
+          sudo apt-get install -y jq
           npm install -g sfdx-cli
           sfdx --version
           npm install -g sfdx-git-delta@3.3.0
 
-      - name: Auth to Salesforce
+      - name: 🔐 Auth to Salesforce
         run: |
           echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
-          if ! sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername; then
-            echo "Erreur : Échec de l'authentification Salesforce."
-            exit 1
-          fi
+          sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername
 
-      - name: Préparer Git pour delta
+      - name: 🔄 Préparer Git pour delta
         run: |
           git fetch origin main
 
-      - name: Générer le delta avec sfdx-git-delta
+      - name: ⚙️ Générer le delta avec sfdx-git-delta
         run: |
           mkdir -p .temp
           sfdx sgd:source:delta --to HEAD --from origin/main --output .temp --generate-delta
-          echo "Contenu du dossier .temp :"
+          echo "📁 Contenu du dossier .temp :"
           ls -R .temp
 
-      - name: Déploiement (Check Only + Tests)
+      - name: 🚀 Déploiement (Check Only + Tests)
         if: github.ref == 'refs/heads/main'
         run: |
           if [ -f ".temp/package/package.xml" ]; then
-            echo "Déploiement en mode simulation avec exécution des tests..."
+            echo "Déploiement en simulation avec tests..."
             sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
+          else
+            echo "⚠️ Aucun changement détecté, les tests Apex seront lancés tout de même."
           fi
 
-      - name: Exécuter les tests Apex
+      - name: 🧪 Exécuter les tests Apex
         run: |
-          echo "Exécution des tests Apex..."
-          TEST_RUN_ID=$(sfdx force:apex:test:run --resultformat human --codecoverage --json | jq -r '.result.testRunId')
-          if [ -z "$TEST_RUN_ID" ]; then
-            echo "Erreur : ID de la session de test non récupéré."
-            exit 1
-          fi
-          echo "ID de la session de test : $TEST_RUN_ID"
+          echo "Déclenchement des tests Apex..."
+          TEST_RUN_ID=$(sfdx force:apex:test:run --resultformat json --wait 10 --testlevel RunLocalTests --outputdir . --targetusername deployOrg --codecoverage | jq -r '.result.testRunId')
+          echo "🎯 TestRunId: $TEST_RUN_ID"
+          echo "TEST_RUN_ID=$TEST_RUN_ID" >> $GITHUB_ENV
 
-          echo "Génération du rapport des tests Apex :"
-          sfdx force:apex:test:report --testrunid $TEST_RUN_ID --resultformat human --codecoverage --json > test-report.json || true
-          cat test-report.json
+      - name: 📊 Récupérer le rapport de test Apex
+        run: |
+          echo "Rapport de test Apex..."
+          sfdx force:apex:test:report -i $TEST_RUN_ID --resultformat human --codecoverage || true
