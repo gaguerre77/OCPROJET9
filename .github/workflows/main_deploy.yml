@@ -25,7 +25,10 @@ jobs:
       - name: Auth to Salesforce
         run: |
           echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
-          sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername
+          if ! sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername; then
+            echo "Erreur : Échec de l'authentification Salesforce."
+            exit 1
+          fi
 
       - name: Préparer Git pour delta
         run: |
