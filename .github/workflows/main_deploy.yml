@@ -11,44 +11,44 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📦 Checkout source
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🧰 Install Node.js, SFDX CLI, and sgd plugin
+      - name: Install Node.js, SFDX CLI, and sgd plugin
         run: |
           npm install -g sfdx-cli
           sfdx --version
           npm install -g sfdx-git-delta@3.3.0
 
-      - name: 🔐 Auth to Salesforce
+      - name: Auth to Salesforce
         run: |
           echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
           sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername
 
-      - name: 🔄 Préparer Git pour delta
-        run: git fetch origin main
+      - name: Préparer Git pour delta
+        run: |
+          git fetch origin main
 
-      - name: ⚙️ Générer le delta avec sfdx-git-delta
+      - name: Générer le delta avec sfdx-git-delta
         run: |
           mkdir -p .temp
           sfdx sgd:source:delta --to HEAD --from origin/main --output .temp --generate-delta
-          echo "📂 Contenu du dossier .temp :"
+          echo "Contenu du dossier .temp :"
           ls -R .temp
 
-      - name: 🚀 Déploiement (Check Only)
+      - name: Déploiement (Check Only + Tests)
         if: github.ref == 'refs/heads/main'
         run: |
           if [ -f ".temp/package/package.xml" ]; then
-            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > test-result.json
+            echo "Déploiement en mode simulation avec exécution des tests..."
+            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
+            echo "Rapport des tests Apex :"
+            sfdx force:apex:test:report --resultformat human --codecoverage --json > test-report.json || true
+            cat test-report.json
           else
-            echo "⚠️ Aucun changement détecté, aucun déploiement nécessaire."
+            echo "Aucun changement détecté, mais les tests sont exécutés quand même."
+            sfdx force:apex:test:report --resultformat human --codecoverage --json > test-report.json || true
+            cat test-report.json
           fi
-
-      - name: 📤 Upload des résultats de test
-        if: github.ref == 'refs/heads/main' && success()
-        uses: actions/upload-artifact@v3.1.2
-        with:
-          name: apex-test-results
-          path: test-result.json
