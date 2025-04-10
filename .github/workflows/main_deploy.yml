@@ -2,50 +2,43 @@ name: Deploy and Validate Metadata
 
 on:
   pull_request:
-    branches:
-      - main
+    branches: [main]
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
-  sfdxvalidate:
-    name: "Run SFDX Validate"
+  sfdx-validate:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [18.x]
-
     steps:
-      - name: ⏬ Checkout repository
+      - name: ⏬ Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🧱 Setup Node.js
+      - name: 🧱 Setup Node + Salesforce CLI
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 18
 
-      - name: 🧰 Install Salesforce CLI and plugins
+      - name: 📦 Install SFDX + delta plugin
         run: |
-          npm install -g @salesforce/cli@latest
-          npm install -g sfdx-git-delta@latest
+          npm install -g @salesforce/cli
+          sf plugins install sfdx-git-delta
 
-      - name: 🔐 Auth to Salesforce org
+      - name: 🔐 Auth to Salesforce
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
         run: |
           echo "$SFDX_AUTH_URL" > auth_url.txt
           sf org login sfdx-url --sfdx-url-file auth_url.txt --alias deployOrg --set-default
 
-      - name: 📦 Generate metadata delta from Git changes
+      - name: 📁 Generate delta
         run: |
           mkdir -p .temp
-          npx sfdx-git-delta source delta --to "HEAD" --from "origin/main" --output .temp --generate-delta
+          sfdx sgd:source:delta --to HEAD --from origin/main --output .temp --generate-delta
 
-      - name: 🚀 Deploy metadata (check-only)
+      - name: 🚀 Deploy (check-only)
         if: github.ref == 'refs/heads/main'
         run: |
           sf project deploy start --manifest .temp/package/package.xml --target-org deployOrg --test-level RunLocalTests --dry-run --ignore-warnings
