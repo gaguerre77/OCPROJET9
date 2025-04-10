@@ -1,9 +1,11 @@
-import { LightningElement, api, wire } from "lwc";
+import { LightningElement, api, wire, track } from "lwc";
 import getSumOrdersOfAccount from "@salesforce/apex/OrderController.getSumOrdersOfAccount";
+import { refreshApex } from "@salesforce/apex";
 
 export default class Orders extends LightningElement {
-  sumOrdersOfCurrentAccount = 0;
+  @track sumOrdersOfCurrentAccount = 0;
   @api recordId;
+  wiredSumOrdersResult;
 
   get isError() {
     const result = this.sumOrdersOfCurrentAccount <= 0;
@@ -18,15 +20,35 @@ export default class Orders extends LightningElement {
   }
 
   @wire(getSumOrdersOfAccount, { accountId: "$recordId" })
-  wiredSumOrders({ error, data }) {
-    console.log("📨 recordId reçu :", this.recordId);
+  wiredSumOrders(result) {
+    console.log("📨 wiredSumOrders called with recordId:", this.recordId);
+    this.wiredSumOrdersResult = result;
+    const { data, error } = result;
 
     if (data) {
       this.sumOrdersOfCurrentAccount = data;
-      console.log("✅ Donnée reçue depuis Apex :", data);
+      console.log("✅ Data received from Apex:", data);
     } else if (error) {
-      console.error("❌ Erreur lors de l'appel Apex :", error);
+      console.error("❌ Error during Apex call:", error);
       this.sumOrdersOfCurrentAccount = 0;
     }
+  }
+
+  // Method to refresh data
+  handleRefresh() {
+    console.log("🔄 Refresh button clicked");
+    refreshApex(this.wiredSumOrdersResult);
+  }
+
+  connectedCallback() {
+    console.log("🔌 Component connected to the DOM");
+  }
+
+  renderedCallback() {
+    console.log("🖌 Component rendered");
+  }
+
+  disconnectedCallback() {
+    console.log("🔌 Component disconnected from the DOM");
   }
 }
