@@ -50,6 +50,10 @@ jobs:
         run: |
           echo "Exécution des tests Apex..."
           TEST_RUN_ID=$(sfdx force:apex:test:run --resultformat human --codecoverage --json | jq -r '.result.testRunId')
+          if [ -z "$TEST_RUN_ID" ]; then
+            echo "Erreur : ID de la session de test non récupéré."
+            exit 1
+          fi
           echo "ID de la session de test : $TEST_RUN_ID"
 
           echo "Génération du rapport des tests Apex :"
