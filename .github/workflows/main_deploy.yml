@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - main
-
   push:
     branches:
       - main
@@ -19,7 +18,8 @@ jobs:
         node-version: [18.x]
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -28,17 +28,22 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Install SFDX CLI and sfdx-git-delta plugin # Ce package va vous permettre de faire un delta entre votre branche et la branch ciblé. Voici la documentation : https://github.com/scolladon/sfdx-git-delta
+      - name: Install Salesforce CLI and git-delta plugin
         run: |
           npm install -g @salesforce/cli@latest
-          echo "y" | npm install sfdx-git-delta@3.3.0 -g
+          echo "y" | npm install -g sfdx-git-delta@3.3.0
 
-      - name: "Authentification Salesforce" # Vous devez avoir une connexion avec Salesforce pour pouvoir deployer le code à la dernière étape.
-        run: # A faire
+      - name: Authenticate to Salesforce
+        run: |
+          echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
+          sf org login sfdx-url --sfdx-url-file auth_url.txt --alias deployOrg --set-default
 
-      - name: "Generate metadata delta pull request" # Utilisez le plug-in sfdx-git-delta pour effectuer un delta, generer le package xml dans un fichier temporaire ex : .temp
-        run: # A faire
+      - name: Generate metadata delta
+        run: |
+          mkdir -p .temp
+          sfdx sgd:source:delta --to "HEAD" --from "origin/main" --output ".temp" --generate-delta
 
-      - name: "Déployer les métadonnées sur la branch main"
+      - name: Deploy metadata (only on push to main)
         if: github.ref == 'refs/heads/main'
-        run: # A faire déployer le code venant du fichier package.xml généré précédemment
+        run: |
+          sf project deploy start --source-dir ".temp/force-app" --target-org deployOrg --ignore-conflicts --wait 10 --test-level RunLocalTests
