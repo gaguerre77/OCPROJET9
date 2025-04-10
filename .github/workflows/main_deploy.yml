@@ -28,8 +28,7 @@ jobs:
           sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername
 
       - name: 🔄 Préparer Git pour delta
-        run: |
-          git fetch origin main
+        run: git fetch origin main
 
       - name: ⚙️ Générer le delta avec sfdx-git-delta
         run: |
@@ -38,19 +37,19 @@ jobs:
           echo "📂 Contenu du dossier .temp :"
           ls -R .temp
 
-      - name: 🚀 Déploiement (Check Only avec Tests)
+      - name: 🚀 Déploiement (Check Only + Tests)
         if: github.ref == 'refs/heads/main'
         run: |
           if [ -f ".temp/package/package.xml" ]; then
             mkdir -p tests
-            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > tests/test-result.json
+            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > tests/apex-test-results.json
           else
             echo "⚠️ Aucun changement détecté, aucun déploiement nécessaire."
           fi
 
       - name: 📤 Upload Apex test results
-        if: github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v3.1.3
+        if: github.ref == 'refs/heads/main' && success()
+        uses: actions/upload-artifact@v3
         with:
           name: apex-test-results
           path: ./tests
