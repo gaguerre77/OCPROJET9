@@ -11,14 +11,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📦 Checkout source
+      - name: 📥 Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🛠 Install Node.js, SFDX CLI, jq, and sgd plugin
+      - name: 🧰 Install Node.js, SFDX CLI, and sgd plugin
         run: |
-          sudo apt-get install -y jq
           npm install -g sfdx-cli
           sfdx --version
           npm install -g sfdx-git-delta@3.3.0
@@ -36,27 +35,38 @@ jobs:
         run: |
           mkdir -p .temp
           sfdx sgd:source:delta --to HEAD --from origin/main --output .temp --generate-delta
-          echo "📁 Contenu du dossier .temp :"
+          echo "📂 Contenu du dossier .temp :"
           ls -R .temp
 
       - name: 🚀 Déploiement (Check Only + Tests)
         if: github.ref == 'refs/heads/main'
         run: |
           if [ -f ".temp/package/package.xml" ]; then
-            echo "Déploiement en simulation avec tests..."
+            echo "Déploiement en mode simulation avec exécution des tests..."
             sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
           else
-            echo "⚠️ Aucun changement détecté, les tests Apex seront lancés tout de même."
+            echo "⚠️ Aucun changement détecté dans le delta. Les tests seront tout de même exécutés."
           fi
 
       - name: 🧪 Exécuter les tests Apex
         run: |
           echo "Déclenchement des tests Apex..."
-          TEST_RUN_ID=$(sfdx force:apex:test:run --resultformat json --wait 10 --testlevel RunLocalTests --outputdir . --targetusername deployOrg --codecoverage | jq -r '.result.testRunId')
+          TEST_RUN_ID=$(sfdx force:apex:test:run --targetusername deployOrg --resultformat json --wait 10 --testlevel RunLocalTests --codecoverage | jq -r '.result.testRunId')
+          if [ -z "$TEST_RUN_ID" ] || [ "$TEST_RUN_ID" == "null" ]; then
+            echo "❌ Erreur : ID de la session de test non récupéré."
+            exit 1
+          fi
           echo "🎯 TestRunId: $TEST_RUN_ID"
           echo "TEST_RUN_ID=$TEST_RUN_ID" >> $GITHUB_ENV
 
-      - name: 📊 Récupérer le rapport de test Apex
+      - name: 📊 Rapport de test Apex
         run: |
-          echo "Rapport de test Apex..."
-          sfdx force:apex:test:report -i $TEST_RUN_ID --resultformat human --codecoverage || true
+          echo "📄 Récupération du rapport de test Apex..."
+          sfdx force:apex:test:report --targetusername deployOrg --testrunid $TEST_RUN_ID --resultformat human --codecoverage > test-report.txt
+          cat test-report.txt
+
+      - name: 📎 Upload du rapport de test
+        uses: actions/upload-artifact@v3
+        with:
+          name: RapportTestApex
+          path: test-report.txt
