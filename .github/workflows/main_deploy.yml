@@ -16,9 +16,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🛠 Install Node.js, SFDX CLI, jq, and sgd plugin
+      - name: 🧰 Install Node.js, SFDX CLI, and sgd plugin
         run: |
-          sudo apt-get install -y jq
           npm install -g sfdx-cli
           sfdx --version
           npm install -g sfdx-git-delta@3.3.0
@@ -36,27 +35,18 @@ jobs:
         run: |
           mkdir -p .temp
           sfdx sgd:source:delta --to HEAD --from origin/main --output .temp --generate-delta
-          echo "📁 Contenu du dossier .temp :"
+          echo "📂 Contenu du dossier .temp :"
           ls -R .temp
 
       - name: 🚀 Déploiement (Check Only + Tests)
         if: github.ref == 'refs/heads/main'
         run: |
           if [ -f ".temp/package/package.xml" ]; then
-            echo "Déploiement en simulation avec tests..."
+            echo "🚀 Déploiement en mode simulation avec exécution des tests..."
             sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
+            echo "📊 Rapport des tests Apex :"
+            sfdx force:apex:test:report --resultformat human --codecoverage --json > test-report.json || true
+            cat test-report.json
           else
-            echo "⚠️ Aucun changement détecté, les tests Apex seront lancés tout de même."
+            echo "⚠️ Aucun changement détecté, aucun déploiement nécessaire."
           fi
-
-      - name: 🧪 Exécuter les tests Apex
-        run: |
-          echo "Déclenchement des tests Apex..."
-          TEST_RUN_ID=$(sfdx force:apex:test:run --resultformat json --wait 10 --testlevel RunLocalTests --outputdir . --targetusername deployOrg --codecoverage | jq -r '.result.testRunId')
-          echo "🎯 TestRunId: $TEST_RUN_ID"
-          echo "TEST_RUN_ID=$TEST_RUN_ID" >> $GITHUB_ENV
-
-      - name: 📊 Récupérer le rapport de test Apex
-        run: |
-          echo "Rapport de test Apex..."
-          sfdx force:apex:test:report -i $TEST_RUN_ID --resultformat human --codecoverage || true
