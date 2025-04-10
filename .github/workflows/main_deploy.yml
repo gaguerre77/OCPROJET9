@@ -13,41 +13,39 @@ jobs:
     name: "Run SFDX Validate"
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [18.x]
+
     steps:
-      - name: Checkout repository
+      - name: ⏬ Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Install Salesforce CLI and plugin
-        run: |
-          npm install -g @salesforce/cli
-          sf plugins install sfdx-git-delta
+      - name: 🧱 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
 
-      - name: Authenticate with Salesforce (via secret)
+      - name: 🧰 Install Salesforce CLI and plugins
         run: |
-          echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
+          npm install -g @salesforce/cli@latest
+          npm install -g sfdx-git-delta@latest
+
+      - name: 🔐 Auth to Salesforce org
+        env:
+          SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+        run: |
+          echo "$SFDX_AUTH_URL" > auth_url.txt
           sf org login sfdx-url --sfdx-url-file auth_url.txt --alias deployOrg --set-default
 
-      - name: Generate metadata delta from Git changes
+      - name: 📦 Generate metadata delta from Git changes
         run: |
           mkdir -p .temp
-          sgd source delta --to "HEAD" --from "origin/main" --output .temp --generate-delta
+          npx sfdx-git-delta source delta --to "HEAD" --from "origin/main" --output .temp --generate-delta
 
-      - name: Deploy delta with validation only
+      - name: 🚀 Deploy metadata (check-only)
+        if: github.ref == 'refs/heads/main'
         run: |
-          sf project deploy start \
-            --manifest .temp/package/package.xml \
-            --target-org deployOrg \
-            --test-level RunLocalTests \
-            --dry-run \
-            --ignore-conflicts \
-            --verbose
-
-      - name: ✅ Success message
-        if: success()
-        run: echo "🎉 Validation réussie !"
-
-      - name: ❌ Failure message
-        if: failure()
-        run: echo "🚨 La validation a échoué. Vérifiez les logs."
+          sf project deploy start --manifest .temp/package/package.xml --target-org deployOrg --test-level RunLocalTests --dry-run --ignore-warnings
