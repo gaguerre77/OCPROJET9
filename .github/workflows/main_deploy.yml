@@ -25,7 +25,11 @@ jobs:
       - name: 🔐 Auth to Salesforce
         run: |
           echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
-          sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername
+          if ! sfdx auth:sfdxurl:store -f auth_url.txt -a projet9 --setdefaultusername; then
+            echo "Erreur : Échec de l'authentification Salesforce."
+            exit 1
+          fi
+          sfdx auth:list
 
       - name: 🔄 Préparer Git pour delta
         run: |
@@ -43,7 +47,7 @@ jobs:
         run: |
           if [ -f ".temp/package/package.xml" ]; then
             echo "Déploiement en mode simulation avec exécution des tests..."
-            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
+            sfdx force:source:deploy -x .temp/package/package.xml -u projet9 --checkonly --testlevel RunLocalTests --json > deploy-result.json
           else
             echo "⚠️ Aucun changement détecté dans le delta. Les tests seront tout de même exécutés."
           fi
@@ -51,7 +55,7 @@ jobs:
       - name: 🧪 Exécuter les tests Apex
         run: |
           echo "Déclenchement des tests Apex..."
-          TEST_RUN_ID=$(sfdx force:apex:test:run --targetusername deployOrg --resultformat json --wait 10 --testlevel RunLocalTests --codecoverage | jq -r '.result.testRunId')
+          TEST_RUN_ID=$(sfdx force:apex:test:run --targetusername projet9 --resultformat json --wait 10 --testlevel RunLocalTests --codecoverage | jq -r '.result.testRunId')
           if [ -z "$TEST_RUN_ID" ] || [ "$TEST_RUN_ID" == "null" ]; then
             echo "❌ Erreur : ID de la session de test non récupéré."
             exit 1
@@ -62,7 +66,7 @@ jobs:
       - name: 📊 Rapport de test Apex
         run: |
           echo "📄 Récupération du rapport de test Apex..."
-          sfdx force:apex:test:report --targetusername deployOrg --testrunid $TEST_RUN_ID --resultformat human --codecoverage > test-report.txt
+          sfdx force:apex:test:report --targetusername projet9 --testrunid $TEST_RUN_ID --resultformat human --codecoverage > test-report.txt
           cat test-report.txt
 
       - name: 📎 Upload du rapport de test
