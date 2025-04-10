@@ -1,94 +1,60 @@
-@IsTest
-private class UpdateAllAccountsTest {
-  @TestSetup
-  static void setup() {
-    // Créer des données de test pour les comptes et les commandes
-    Account testAccount = new Account(
-      Name = 'Test Account',
-      Chiffre_d_affaire__c = 0.0
+@isTest
+public class UpdateAllAccountsTest {
+  @isTest
+  static void testBatchUpdatesPricesAndCalculatesCA() {
+    // 🧪 Créer les données de base via la factory
+    TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
+      2
     );
-    insert testAccount;
 
-    Product2 testProduct = new Product2(Name = 'Test Product', IsActive = true);
-    insert testProduct;
-
-    Id standardPricebookId = Test.getStandardPricebookId();
-
-    PricebookEntry pricebookEntry = new PricebookEntry(
-      Pricebook2Id = standardPricebookId,
-      Product2Id = testProduct.Id,
-      UnitPrice = 100.0,
-      IsActive = true
-    );
-    insert pricebookEntry;
-
-    // Créer des commandes avec le statut 'Draft'
-    Order testOrder1 = new Order(
-      AccountId = testAccount.Id,
-      Status = 'Draft', // S'assurer que le statut est 'Draft'
-      EffectiveDate = Date.today(),
-      Pricebook2Id = standardPricebookId
-    );
-    insert testOrder1;
-
-    OrderItem orderItem1 = new OrderItem(
-      OrderId = testOrder1.Id,
-      PricebookEntryId = pricebookEntry.Id,
-      Quantity = 1,
-      UnitPrice = pricebookEntry.UnitPrice
-    );
-    insert orderItem1;
-
-    // Créer d'autres commandes, toujours avec le statut 'Draft'
-    Order testOrder2 = new Order(
-      AccountId = testAccount.Id,
-      Status = 'Draft',
-      EffectiveDate = Date.today(),
-      Pricebook2Id = standardPricebookId
-    );
-    insert testOrder2;
-
-    OrderItem orderItem2 = new OrderItem(
-      OrderId = testOrder2.Id,
-      PricebookEntryId = pricebookEntry.Id,
-      Quantity = 2,
-      UnitPrice = pricebookEntry.UnitPrice
-    );
-    insert orderItem2;
-  }
-
-  @IsTest
-  static void testBatchWithLargeNumberOfOrders() {
-    // Récupérer les enregistrements de test
-    Account testAccount = [SELECT Id FROM Account LIMIT 1];
-    List<Order> orders = [
-      SELECT Id, AccountId, Status, CustomTotalAmount__c
-      FROM Order
-      WHERE AccountId = :testAccount.Id
-    ];
-
-    // Passer les commandes en statut 'Activated' (une fois insérées et valides)
-    for (Order order : orders) {
-      order.Status = 'Activated'; // Activer les commandes
+    // 🛒 Ajouter des OrderItems
+    List<OrderItem> items = new List<OrderItem>();
+    for (Order o : data.orders) {
+      items.add(
+        new OrderItem(
+          OrderId = o.Id,
+          Quantity = 2,
+          PricebookEntryId = data.pricebookEntryId,
+          UnitPrice = 80 // volontairement différent du prix standard (100)
+        )
+      );
     }
+    insert items;
 
-    update orders; // Mettre à jour les commandes pour les activer
+    // ✅ Activer une commande pour test du CA
+    Order activatedOrder = data.orders[0];
+    activatedOrder.Status = 'Activated';
+    update activatedOrder;
 
-    // Lancer le batch
+    // ⚙️ Lancer le batch
     Test.startTest();
     UpdateAllAccounts batch = new UpdateAllAccounts();
-    Database.executeBatch(batch, 200); // Exécuter le batch
+    Database.executeBatch(batch, 50);
     Test.stopTest();
 
-    // Vérifier les résultats
-    testAccount = [
+    // ✅ Vérification : CA du compte (commande activée = 2 x 100)
+    Account acc = [
       SELECT Id, Chiffre_d_affaire__c
       FROM Account
-      WHERE Id = :testAccount.Id
+      WHERE Id = :data.accountId
     ];
-    System.assert(
-      testAccount.Chiffre_d_affaire__c > 0,
-      'Le chiffre d\'affaires du compte n\'a pas été mis à jour.'
+    System.assertEquals(
+      200,
+      acc.Chiffre_d_affaire__c,
+      '💥 Le CA du compte est incorrect'
     );
+
+    // 🧪 Vérification que les prix des OrderItems ont été mis à jour à 100
+    for (OrderItem oi : [
+      SELECT Id, UnitPrice
+      FROM OrderItem
+      WHERE OrderId IN :data.orders
+    ]) {
+      System.assertEquals(
+        100,
+        oi.UnitPrice,
+        '💥 Prix de l\'OrderItem non mis à jour'
+      );
+    }
   }
 }

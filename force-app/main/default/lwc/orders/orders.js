@@ -1,26 +1,54 @@
-import { LightningElement, api, wire } from "lwc";
+import { LightningElement, api, wire, track } from "lwc";
 import getSumOrdersOfAccount from "@salesforce/apex/OrderController.getSumOrdersOfAccount";
+import { refreshApex } from "@salesforce/apex";
 
 export default class Orders extends LightningElement {
-  sumOrdersOfCurrentAccount = 0;
+  @track sumOrdersOfCurrentAccount = 0;
   @api recordId;
+  wiredSumOrdersResult;
 
-  // Propriétés pour contrôler l'affichage conditionnel
   get isError() {
-    return this.sumOrdersOfCurrentAccount <= 0;
+    const result = this.sumOrdersOfCurrentAccount <= 0;
+    console.log("🟥 isError →", result);
+    return result;
   }
 
   get isSuccess() {
-    return this.sumOrdersOfCurrentAccount > 0;
+    const result = this.sumOrdersOfCurrentAccount > 0;
+    console.log("🟩 isSuccess →", result);
+    return result;
   }
 
   @wire(getSumOrdersOfAccount, { accountId: "$recordId" })
-  wiredSumOrders({ error, data }) {
+  wiredSumOrders(result) {
+    console.log("📨 wiredSumOrders called with recordId:", this.recordId);
+    this.wiredSumOrdersResult = result;
+    const { data, error } = result;
+
     if (data) {
       this.sumOrdersOfCurrentAccount = data;
+      console.log("✅ Data received from Apex:", data);
     } else if (error) {
-      console.error("Error fetching sum of orders:", error);
-      this.sumOrdersOfCurrentAccount = 0; // Assurez-vous que la valeur est définie en cas d'erreur
+      console.error("❌ Error during Apex call:", error);
+      this.sumOrdersOfCurrentAccount = 0;
     }
+  }
+
+  // Method to refresh data
+  handleRefresh() {
+    console.log("🔄 Refresh button clicked");
+    refreshApex(this.wiredSumOrdersResult);
+  }
+
+  connectedCallback() {
+    console.log("🔌 Component connected to the DOM");
+  }
+
+  renderedCallback() {
+    console.log("🖌 Component rendered");
+  }
+
+  disconnectedCallback() {
+    console.log("🔌 Component disconnected from the DOM");
   }
 }

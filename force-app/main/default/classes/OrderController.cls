@@ -1,17 +1,29 @@
 public with sharing class OrderController {
-  @AuraEnabled
+  @AuraEnabled(cacheable=true)
   public static Decimal getSumOrdersOfAccount(Id accountId) {
-    // Utilisation d'une requête agrégée pour calculer la somme côté base de données
-    AggregateResult result = [
-      SELECT SUM(TotalAmount) sumTotal
-      FROM Order
-      WHERE AccountId = :accountId AND Status = 'Activated'
-    ];
+    System.debug('📨 [Apex] Reçu accountId : ' + accountId);
 
-    //top
-    // Si aucune commande n'est trouvée, retourner 0
-    return result.get('sumTotal') != null
-      ? (Decimal) result.get('sumTotal')
-      : 0;
+    if (accountId == null) {
+      throw new AuraHandledException('L\'ID du compte est requis.');
+    }
+
+    try {
+      AggregateResult result = [
+        SELECT SUM(TotalAmount) sumTotal
+        FROM Order
+        WHERE AccountId = :accountId AND Status = 'Activated'
+      ];
+
+      Decimal total = (Decimal) result.get('sumTotal');
+      System.debug('📊 [Apex] Total des commandes activées : ' + total);
+
+      return total != null ? total : 0;
+    } catch (Exception e) {
+      System.debug('🔥 [Apex] Erreur : ' + e.getMessage());
+      throw new AuraHandledException(
+        'Erreur lors de la récupération du chiffre d\'affaire : ' +
+        e.getMessage()
+      );
+    }
   }
 }

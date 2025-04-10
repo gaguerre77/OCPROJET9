@@ -1,122 +1,118 @@
-@IsTest
+@isTest
 public class UpdateAccountCAHandlerTest {
   @TestSetup
-  static void setup() {
-    // Créer un compte de test
-    Account testAccount = new Account(
-      Name = 'Test Account',
-      Chiffre_d_affaire__c = 0.0
+  static void setupTestData() {
+    // Créer un compte, produit, PBE et 2 commandes Draft via la factory
+    TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
+      2
     );
-    insert testAccount;
+    List<Order> orders = data.orders;
 
-    // Créer un produit actif
-    Product2 testProduct = new Product2(Name = 'Test Product', IsActive = true);
-    insert testProduct;
+    // Ajouter des OrderItems pour calculer automatiquement le TotalAmount
 
-    // Récupérer le Pricebook standard
-    Id standardPricebookId = Test.getStandardPricebookId();
+    // Commande 1 : 1 x 100 + 2 x 150 = 400
+    List<OrderItem> items = new List<OrderItem>{
+      new OrderItem(
+        OrderId = orders[0].Id,
+        PricebookEntryId = data.pricebookEntryId,
+        Quantity = 1,
+        UnitPrice = 100
+      ),
+      new OrderItem(
+        OrderId = orders[0].Id,
+        PricebookEntryId = data.pricebookEntryId,
+        Quantity = 2,
+        UnitPrice = 150
+      ),
+      // Commande 2 : 3 x 200 = 600
+      new OrderItem(
+        OrderId = orders[1].Id,
+        PricebookEntryId = data.pricebookEntryId,
+        Quantity = 3,
+        UnitPrice = 200
+      )
+    };
 
-    // Créer une entrée de prix
-    PricebookEntry pbe = new PricebookEntry(
-      Product2Id = testProduct.Id,
-      Pricebook2Id = standardPricebookId,
-      UnitPrice = 100.0,
-      IsActive = true
-    );
-    insert pbe;
+    insert items;
 
-    // Créer deux commandes en statut Draft
-    Order order1 = new Order(
-      AccountId = testAccount.Id,
-      Status = 'Draft',
-      EffectiveDate = Date.today(),
-      Pricebook2Id = standardPricebookId,
-      CustomTotalAmount__c = 100.0
-    );
-    insert order1;
-
-    OrderItem oi1 = new OrderItem(
-      OrderId = order1.Id,
-      PricebookEntryId = pbe.Id,
-      Quantity = 1,
-      UnitPrice = 100.0
-    );
-    insert oi1;
-
-    Order order2 = new Order(
-      AccountId = testAccount.Id,
-      Status = 'Draft',
-      EffectiveDate = Date.today(),
-      Pricebook2Id = standardPricebookId,
-      CustomTotalAmount__c = 200.0
-    );
-    insert order2;
-
-    OrderItem oi2 = new OrderItem(
-      OrderId = order2.Id,
-      PricebookEntryId = pbe.Id,
-      Quantity = 2,
-      UnitPrice = 100.0
-    );
-    insert oi2;
+    // TotalAmount sera automatiquement calculé par Salesforce après insertion des OrderItems
   }
 
-  @IsTest
-  static void testHandleAfterUpdate() {
-    // Récupérer le compte et les commandes
-    Account acc = [SELECT Id, Chiffre_d_affaire__c FROM Account LIMIT 1];
+  @isTest
+  static void testChiffreAffaireAvecTotalAmount() {
+    // Récupérer les commandes
     List<Order> orders = [
-      SELECT Id, AccountId, Status, CustomTotalAmount__c
+      SELECT Id, Status, AccountId
       FROM Order
-      WHERE AccountId = :acc.Id
+      ORDER BY CreatedDate ASC
+      LIMIT 2
     ];
 
-    // Simuler un changement de statut de Draft → Activated
-    Order orderToUpdate = orders[0];
-    Order oldOrder = orderToUpdate.clone(false, false, false, false);
-    orderToUpdate.Status = 'Activated';
+    Order orderToActivate = orders[0];
+    Order oldOrder = orderToActivate.clone(false, false, false, false);
+
+    // Activer la commande (commande 1 : TotalAmount = 400)
+    orderToActivate.Status = 'Activated';
 
     Test.startTest();
-    update orderToUpdate;
+    update orderToActivate;
     UpdateAccountCAHandler.handleAfterUpdate(
-      new List<Order>{ orderToUpdate },
-      new Map<Id, Order>{ orderToUpdate.Id => oldOrder }
+      new List<Order>{ orderToActivate },
+      new Map<Id, Order>{ orderToActivate.Id => oldOrder }
     );
     Test.stopTest();
 
-    // Le chiffre d'affaire devrait refléter uniquement la commande activée
-    acc = [SELECT Chiffre_d_affaire__c FROM Account WHERE Id = :acc.Id];
+    // Vérifier que le CA du compte est bien égal à TotalAmount de la commande activée
+    Account acc = [
+      SELECT Chiffre_d_affaire__c
+      FROM Account
+      WHERE Id = :orderToActivate.AccountId
+      LIMIT 1
+    ];
+
+    Decimal expected = 400;
+    System.debug(
+      '✅ CA attendu : ' + expected + ' | CA réel : ' + acc.Chiffre_d_affaire__c
+    );
     System.assertEquals(
-      100.0,
+      expected,
       acc.Chiffre_d_affaire__c,
-      'Chiffre d\'affaire incorrect après activation'
+      '❌ Le CA ne correspond pas au TotalAmount de la commande.'
     );
   }
 
-  @IsTest
-  static void testNoStatusChangeDoesNothing() {
-    // Récupérer les commandes de test
-    Account acc = [SELECT Id, Chiffre_d_affaire__c FROM Account LIMIT 1];
+  @isTest
+  static void testStatutInchangeNeModifiePasCA() {
     List<Order> orders = [
-      SELECT Id, AccountId, Status, CustomTotalAmount__c
+      SELECT Id, Status, AccountId
       FROM Order
-      WHERE AccountId = :acc.Id
+      ORDER BY CreatedDate ASC
+      LIMIT 2
     ];
 
-    // Aucune modification de statut
+    Order unchangedOrder = orders[1]; // reste en Draft
+
     Test.startTest();
     UpdateAccountCAHandler.handleAfterUpdate(
-      new List<Order>{ orders[1] },
-      new Map<Id, Order>{ orders[1].Id => orders[1] }
+      new List<Order>{ unchangedOrder },
+      new Map<Id, Order>{ unchangedOrder.Id => unchangedOrder }
     );
     Test.stopTest();
 
-    // Le chiffre d'affaire doit rester à 0
-    acc = [SELECT Chiffre_d_affaire__c FROM Account WHERE Id = :acc.Id];
+    Account acc = [
+      SELECT Chiffre_d_affaire__c
+      FROM Account
+      WHERE Id = :unchangedOrder.AccountId
+      LIMIT 1
+    ];
+
+    Decimal actualCA = acc.Chiffre_d_affaire__c != null
+      ? acc.Chiffre_d_affaire__c
+      : 0;
     System.assertEquals(
-      0.0,
-      acc.Chiffre_d_affaire__c,
-      'Chiffre d\'affaire ne devrait pas être modifié'
+      0,
+      actualCA,
+      '❌ Le CA ne doit pas être modifié si le statut ne change pas.'
     );
   }
 }

@@ -5,10 +5,8 @@ public class UpdateAccountCAHandler {
   ) {
     Set<Id> accountIds = new Set<Id>();
 
-    // Identifier les comptes dont le statut de commande est passé de Draft à Activated
     for (Order newOrder : newOrders) {
       Order oldOrder = oldOrdersMap.get(newOrder.Id);
-
       if (
         oldOrder != null &&
         oldOrder.Status == 'Draft' &&
@@ -19,32 +17,34 @@ public class UpdateAccountCAHandler {
       }
     }
 
-    if (accountIds.isEmpty()) {
+    if (accountIds.isEmpty())
       return;
-    }
 
-    // Récupérer les comptes à mettre à jour
-    Map<Id, Account> accountsMap = new Map<Id, Account>(
-      [SELECT Id, Chiffre_d_affaire__c FROM Account WHERE Id IN :accountIds]
-    );
-
-    // Agréger les montants des commandes activées par compte
-    List<AggregateResult> aggregatedOrders = [
-      SELECT AccountId, SUM(CustomTotalAmount__c) total
+    // Agrégation directe du TotalAmount des commandes activées
+    List<AggregateResult> results = [
+      SELECT AccountId, SUM(TotalAmount) total
       FROM Order
-      WHERE AccountId IN :accountIds AND Status = 'Activated'
+      WHERE Status = 'Activated' AND AccountId IN :accountIds
       GROUP BY AccountId
     ];
 
-    for (AggregateResult ar : aggregatedOrders) {
+    Map<Id, Decimal> accountTotals = new Map<Id, Decimal>();
+    for (AggregateResult ar : results) {
       Id accId = (Id) ar.get('AccountId');
       Decimal total = (Decimal) ar.get('total');
-
-      if (accountsMap.containsKey(accId)) {
-        accountsMap.get(accId).Chiffre_d_affaire__c = total;
-      }
+      accountTotals.put(accId, total != null ? total : 0);
     }
 
-    update accountsMap.values();
+    // Mise à jour des comptes
+    List<Account> updates = new List<Account>();
+    for (Id accId : accountTotals.keySet()) {
+      updates.add(
+        new Account(Id = accId, Chiffre_d_affaire__c = accountTotals.get(accId))
+      );
+    }
+
+    if (!updates.isEmpty()) {
+      update updates;
+    }
   }
 }
