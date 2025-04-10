@@ -7,10 +7,11 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
           Id,
           AccountId,
           Pricebook2Id,
-          Status, // Include the Status field here
+          Status, // On inclus le Status pour pouvoir trier les commandes pour le CA
           (SELECT Id, UnitPrice, Quantity, PricebookEntryId FROM OrderItems)
         FROM Order
         WHERE Status IN ('Activated', 'Draft')
+        // on garde toutes les commandes pour la mise à jour des prix
       ]
     );
   }
@@ -27,7 +28,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
     }
     System.debug('🔎 Pricebook2 à charger : ' + pricebookIds);
 
-    // Récupérer tous les PricebookEntry nécessaires
+    // Récupérer tous les PricebookEntry nécessaires mais pas plus !
     Map<Id, List<PricebookEntry>> pricebookEntriesMap = new Map<Id, List<PricebookEntry>>();
     for (PricebookEntry pbe : [
       SELECT Id, Pricebook2Id, Product2Id, UnitPrice
@@ -87,7 +88,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
       update orderItemsToUpdate;
     }
 
-    // Étape 2: Calculer le chiffre d'affaires pour les comptes
+    // Étape 2: Calculer le chiffre d'affaires pour les comptes sans faire de requetes pour chaque compte
     Map<Id, Decimal> accountTotalMap = new Map<Id, Decimal>();
 
     for (Order order : scope) {

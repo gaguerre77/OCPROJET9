@@ -1,94 +1,46 @@
 @isTest
-private class UpdateAllAccountsScheduleTest {
-  @TestSetup
-  static void setup() {
-    // Créer des données de test pour les comptes, les produits et les commandes
-    Account testAccount = new Account(
-      Name = 'Test Account',
-      Chiffre_d_affaire__c = 0.0
-    );
-    insert testAccount;
-
-    Product2 testProduct = new Product2(Name = 'Test Product', IsActive = true);
-    insert testProduct;
-
-    Id standardPricebookId = Test.getStandardPricebookId();
-
-    PricebookEntry pricebookEntry = new PricebookEntry(
-      Pricebook2Id = standardPricebookId,
-      Product2Id = testProduct.Id,
-      UnitPrice = 100.0,
-      IsActive = true
-    );
-    insert pricebookEntry;
-
-    // Créer des commandes avec le statut 'Draft'
-    Order testOrder1 = new Order(
-      AccountId = testAccount.Id,
-      Status = 'Draft',
-      EffectiveDate = Date.today(),
-      Pricebook2Id = standardPricebookId
-    );
-    insert testOrder1;
-
-    OrderItem orderItem1 = new OrderItem(
-      OrderId = testOrder1.Id,
-      PricebookEntryId = pricebookEntry.Id,
-      Quantity = 1,
-      UnitPrice = pricebookEntry.UnitPrice
-    );
-    insert orderItem1;
-
-    // Créer d'autres commandes, toujours avec le statut 'Draft'
-    Order testOrder2 = new Order(
-      AccountId = testAccount.Id,
-      Status = 'Draft',
-      EffectiveDate = Date.today(),
-      Pricebook2Id = standardPricebookId
-    );
-    insert testOrder2;
-
-    OrderItem orderItem2 = new OrderItem(
-      OrderId = testOrder2.Id,
-      PricebookEntryId = pricebookEntry.Id,
-      Quantity = 2,
-      UnitPrice = pricebookEntry.UnitPrice
-    );
-    insert orderItem2;
-  }
-
+public class UpdateAllAccountsScheduleTest {
   @isTest
-  static void testScheduledBatchExecution() {
-    // Créer une instance du job scheduler
-    String cronExp = '0 0 0 * * ?'; // Planifie l'exécution tous les jours à minuit
-    String jobName = 'Test UpdateAllAccountsSchedule';
+  static void testExecuteSchedulesBatchWithTestDataFactory() {
+    // 🧪 Générer les données de test (2 commandes Draft)
+    TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
+      2
+    );
 
-    // Planifier le job pour qu'il s'exécute à l'heure définie par l'expression cron
-    System.schedule(jobName, cronExp, new UpdateAllAccountsSchedule());
+    // ⚙️ Créer des OrderItems sur chaque commande
+    List<OrderItem> items = new List<OrderItem>();
+    for (Order o : data.orders) {
+      items.add(
+        new OrderItem(
+          OrderId = o.Id,
+          Quantity = 2,
+          PricebookEntryId = data.pricebookEntryId,
+          UnitPrice = 80 // volontairement différent du prix standard
+        )
+      );
+    }
+    insert items;
 
-    // Exécuter le test
+    // ✅ Activer une des commandes pour déclencher le calcul de CA
+    Order activatedOrder = data.orders[0];
+    activatedOrder.Status = 'Activated';
+    update activatedOrder;
+
+    // 🔁 Exécution de la classe Schedulable (appel manuel de execute)
     Test.startTest();
-
-    // Vérifier que le job a bien été planifié
-    CronTrigger ct = [
-      SELECT Id, State, NextFireTime
-      FROM CronTrigger
-      WHERE CronJobDetail.Name = :jobName
-      LIMIT 1
-    ];
-
-    // Vérifier l'état du job et la prochaine exécution
-    System.assertEquals(
-      'WAITING',
-      ct.State,
-      'Le job doit être dans l\'état WAITING'
-    );
-    System.assertNotEquals(
-      null,
-      ct.NextFireTime,
-      'Le job doit avoir une prochaine heure d\'exécution définie'
-    );
-
+    new UpdateAllAccountsSchedule().execute(null);
     Test.stopTest();
+
+    // 📊 Vérification : le CA du compte doit avoir été mis à jour (2 * 100)
+    Account updatedAcc = [
+      SELECT Chiffre_d_affaire__c
+      FROM Account
+      WHERE Id = :data.accountId
+    ];
+    System.assertEquals(
+      200,
+      updatedAcc.Chiffre_d_affaire__c,
+      '💥 Le chiffre d\'affaire est incorrect après l\'exécution du batch'
+    );
   }
 }
