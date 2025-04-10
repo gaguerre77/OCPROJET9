@@ -6,7 +6,7 @@ public with sharing class OrderController {
     if (accountId == null) {
       throw new AuraHandledException('L\'ID du compte est requis.');
     }
-    // comment
+    // comment2
     try {
       AggregateResult result = [
         SELECT SUM(TotalAmount) sumTotal
