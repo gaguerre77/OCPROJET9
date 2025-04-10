@@ -38,11 +38,15 @@ jobs:
           echo "📂 Contenu du dossier .temp :"
           ls -R .temp
 
-      - name: 🚀 Déploiement (Check Only)
+      - name: 🚀 Déploiement (Check Only + Tests)
         if: github.ref == 'refs/heads/main'
         run: |
           if [ -f ".temp/package/package.xml" ]; then
-            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests
+            echo "🚀 Déploiement en mode simulation avec exécution des tests..."
+            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
+            echo "📊 Rapport des tests Apex :"
+            sfdx force:apex:test:report --resultformat human --codecoverage --json > test-report.json || true
+            cat test-report.json
           else
             echo "⚠️ Aucun changement détecté, aucun déploiement nécessaire."
           fi
