@@ -10,40 +10,32 @@ on:
 
 jobs:
   sfdxvalidate:
-    name: "Run SFDX Validate"
+    name: "Run SFDX Validate and Deploy"
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [18.x]
-
     steps:
-      - name: Checkout repository
+      - name: 📥 Checkout Repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ matrix.node-version }}
-
-      - name: Install Salesforce CLI and git-delta plugin
+      - name: 🧰 Install Salesforce CLI and Delta Plugin
         run: |
-          npm install -g @salesforce/cli@latest
-          echo "y" | npm install -g sfdx-git-delta@3.3.0
+          npm install -g sfdx-cli
+          sfdx --version
+          sfdx plugins:install sfdx-git-delta
 
-      - name: Authenticate to Salesforce
+      - name: 🔐 Auth with Salesforce using SFDX_URL
         run: |
           echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
-          sf org login sfdx-url --sfdx-url-file auth_url.txt --alias deployOrg --set-default
+          sfdx auth:sfdxurl:store --sfdxurlfile auth_url.txt --setalias deployOrg --setdefaultusername
 
-      - name: Generate metadata delta
+      - name: ⚙️ Generate Delta with sfdx-git-delta
         run: |
           mkdir -p .temp
           sfdx sgd:source:delta --to "HEAD" --from "origin/main" --output ".temp" --generate-delta
 
-      - name: Deploy metadata (only on push to main)
+      - name: 📦 Deploy Metadata to Org
         if: github.ref == 'refs/heads/main'
         run: |
-          sf project deploy start --source-dir ".temp/force-app" --target-org deployOrg --ignore-conflicts --wait 10 --test-level RunLocalTests
+          sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel
