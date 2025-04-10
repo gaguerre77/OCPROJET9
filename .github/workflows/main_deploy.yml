@@ -38,15 +38,18 @@ jobs:
           echo "📂 Contenu du dossier .temp :"
           ls -R .temp
 
-      - name: 🚀 Déploiement (Check Only + Tests)
-        if: github.ref == 'refs/heads/main'
+      - name: 🚀 Déploiement (Check Only)
+        if: github.ref == 'refs/heads/main' &&  hashFiles('.temp/package/package.xml') != ''
         run: |
-          if [ -f ".temp/package/package.xml" ]; then
-            echo "🚀 Déploiement en mode simulation avec exécution des tests..."
-            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
-            echo "📊 Rapport des tests Apex :"
-            sfdx force:apex:test:report --resultformat human --codecoverage --json > test-report.json || true
-            cat test-report.json
-          else
-            echo "⚠️ Aucun changement détecté, aucun déploiement nécessaire."
-          fi
+          sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests
+
+      - name: ✅ Exécuter les tests Apex (RunLocalTests)
+        run: |
+          sfdx force:apex:test:run --resultformat human --codecoverage --wait 10 --testlevel RunLocalTests --outputdir ./tests
+          sfdx force:apex:test:report --resultformat human --codecoverage --outputdir ./tests
+
+      - name: 📤 Upload Apex test results
+        uses: actions/upload-artifact@v3
+        with:
+          name: apex-test-results
+          path: ./tests
