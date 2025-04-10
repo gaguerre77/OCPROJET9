@@ -18,7 +18,6 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
   public void execute(Database.BatchableContext BC, List<Order> scope) {
     System.debug('📦 Traitement d\'un lot de ' + scope.size() + ' commandes');
 
-    Map<Id, Decimal> accountTotalMap = new Map<Id, Decimal>();
     List<OrderItem> orderItemsToUpdate = new List<OrderItem>();
     Set<Id> pricebookIds = new Set<Id>();
 
@@ -42,9 +41,8 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
     }
     System.debug('📘 PricebookEntry chargés : ' + pricebookEntriesMap.size());
 
+    // Étape 1: Mettre à jour tous les OrderItem
     for (Order order : scope) {
-      Decimal newTotalAmount = 0;
-
       System.debug('🧾 Traitement de la commande ' + order.Id);
 
       Map<Id, PricebookEntry> orderPricebookEntries = new Map<Id, PricebookEntry>();
@@ -60,9 +58,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
         );
         if (pricebookEntry != null) {
           Decimal newPrice = pricebookEntry.UnitPrice;
-          Decimal lineTotal = newPrice * item.Quantity;
           item.UnitPrice = newPrice;
-          newTotalAmount += lineTotal;
           orderItemsToUpdate.add(item);
 
           System.debug(
@@ -73,7 +69,7 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
               ' x ' +
               newPrice +
               ' = ' +
-              lineTotal
+              (item.Quantity * newPrice)
           );
         } else {
           System.debug(
@@ -81,9 +77,27 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
           );
         }
       }
+    }
 
-      // Calculer le chiffre d'affaires uniquement pour les commandes 'Activated'
+    System.debug(
+      '💾 OrderItems à mettre à jour : ' + orderItemsToUpdate.size()
+    );
+
+    if (!orderItemsToUpdate.isEmpty()) {
+      update orderItemsToUpdate;
+    }
+
+    // Étape 2: Calculer le chiffre d'affaires pour les comptes
+    Map<Id, Decimal> accountTotalMap = new Map<Id, Decimal>();
+
+    for (Order order : scope) {
       if (order.Status == 'Activated') {
+        Decimal newTotalAmount = 0;
+
+        for (OrderItem item : order.OrderItems) {
+          newTotalAmount += item.UnitPrice * item.Quantity;
+        }
+
         System.debug(
           '✅ Total recalculé pour Order ' + order.Id + ' : ' + newTotalAmount
         );
@@ -97,14 +111,6 @@ public class UpdateAllAccounts implements Database.Batchable<SObject> {
           accountTotalMap.put(order.AccountId, newTotalAmount);
         }
       }
-    }
-
-    System.debug(
-      '💾 OrderItems à mettre à jour : ' + orderItemsToUpdate.size()
-    );
-
-    if (!orderItemsToUpdate.isEmpty()) {
-      update orderItemsToUpdate;
     }
 
     List<Account> accountsToUpdate = new List<Account>();
