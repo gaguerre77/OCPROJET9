@@ -1,62 +1,53 @@
 name: Deploy and Validate Metadata
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
 
 jobs:
   sfdxvalidate:
-    name: "Run SFDX Validate and Generate Report"
+    name: "Run SFDX Validate"
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📦 Checkout Repository
+      - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: 🧰 Setup Node and SFDX
-        uses: actions/setup-node@v4
         with:
-          node-version: "18.x"
+          fetch-depth: 0
 
-      - name: 🔧 Install Salesforce CLI and Delta Plugin
+      - name: Install Salesforce CLI and plugin
         run: |
           npm install -g @salesforce/cli
-          npm install -g sfdx-git-delta@3.3.0
+          sf plugins install sfdx-git-delta
 
-      - name: 🔐 Auth Salesforce Org via SFDX URL
+      - name: Authenticate with Salesforce (via secret)
         run: |
           echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
           sf org login sfdx-url --sfdx-url-file auth_url.txt --alias deployOrg --set-default
 
-      - name: 📁 Generate delta and package.xml
+      - name: Generate metadata delta from Git changes
         run: |
           mkdir -p .temp
-          sfdx sgd:source:delta --to HEAD --from HEAD~1 --output .temp --generate-delta
+          sgd source delta --to "HEAD" --from "origin/main" --output .temp --generate-delta
 
-      - name: 🚀 Deploy metadata in CheckOnly mode
+      - name: Deploy delta with validation only
         run: |
-          sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
+          sf project deploy start \
+            --manifest .temp/package/package.xml \
+            --target-org deployOrg \
+            --test-level RunLocalTests \
+            --dry-run \
+            --ignore-conflicts \
+            --verbose
 
-      - name: 📝 Generate Deployment Report
-        run: |
-          echo "## 🚀 Rapport de Déploiement - $(date)" >> deploy-report.md
-          echo "### 👤 Auteur : ${{ github.actor }}" >> deploy-report.md
-          echo "### 🔁 Branche : ${{ github.ref }}" >> deploy-report.md
-          echo "### 🧪 Mode : Validation (checkonly)" >> deploy-report.md
-          echo "---" >> deploy-report.md
-          echo "### 📁 Delta généré :" >> deploy-report.md
-          cat .temp/package/package.xml >> deploy-report.md
-          echo "---" >> deploy-report.md
-          echo "### Résultat JSON :" >> deploy-report.md
-          cat deploy-result.json >> deploy-report.md
-
-      - name: 💾 Commit report to repo (optional)
+      - name: ✅ Success message
         if: success()
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git checkout -b deploy-report-$(date +%s)
-          git add deploy-report.md
-          git commit -m "📝 Add deploy report"
-          git push origin HEAD
+        run: echo "🎉 Validation réussie !"
+
+      - name: ❌ Failure message
+        if: failure()
+        run: echo "🚨 La validation a échoué. Vérifiez les logs."
