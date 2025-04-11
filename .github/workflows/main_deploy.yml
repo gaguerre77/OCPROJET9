@@ -48,8 +48,17 @@ jobs:
         run: |
           sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format junit
 
+      - name: 📂 Vérification du contenu du delta
+        run: |
+          if [ -d ".sfdx-delta/force-app" ] && [ "$(ls -A .sfdx-delta/force-app)" ]; then
+            echo "✅ Des métadonnées ont été modifiées, préparation du déploiement."
+          else
+            echo "⚠️ Aucun changement détecté dans force-app, aucun déploiement effectué."
+            exit 0
+          fi
+
       - name: 🚀 Déploiement des métadonnées vers la sandbox
-        if: github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && hashFiles('.sfdx-delta/force-app/**') != ''
         run: |
           sf project deploy start \
             --source-dir .sfdx-delta/force-app \
