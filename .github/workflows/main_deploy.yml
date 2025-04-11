@@ -43,3 +43,7 @@ jobs:
         run: |
           mkdir -p .sfdx-delta
           sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
+
+      - name: 🧪 Exécution des tests Apex
+        if: github.ref == 'refs/heads/main'
+        run: sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format human
