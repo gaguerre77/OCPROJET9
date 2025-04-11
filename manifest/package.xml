@@ -1,10 +1,24 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <Package xmlns="http://soap.sforce.com/2006/04/metadata">
 	<types>
-		<members>MyTeamOrdersController</members>
+		<members>AgentforceHomepageController</members>
+		<members>AgentforceHomepageControllerTest</members>
+		<members>OrderController</members>
 		<members>OrderControllerTest</members>
+		<members>OrderImportTest</members>
 		<members>TestDataFactory</members>
+		<members>UpdateAccountCAHandler</members>
+		<members>UpdateAccountCAHandlerTest</members>
+		<members>UpdateAccountCA_TriggerLoadTest</members>
+		<members>UpdateAllAccounts</members>
+		<members>UpdateAllAccountsSchedule</members>
+		<members>UpdateAllAccountsScheduleTest</members>
+		<members>UpdateAllAccountsTest</members>
 		<name>ApexClass</name>
+	</types>
+	<types>
+		<members>UpdateAccountCA</members>
+		<name>ApexTrigger</name>
 	</types>
 	<version>63.0</version>
 </Package>
