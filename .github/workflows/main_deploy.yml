@@ -38,3 +38,8 @@ jobs:
         run: echo "$SFDX_AUTH_URL" > sfdx_auth.txt && sf org login sfdx-url --sfdx-url-file sfdx_auth.txt --alias mon-org --set-default
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+
+      - name: 🧾 Génération du delta des métadonnées
+        run: |
+          mkdir -p .sfdx-delta
+          sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
