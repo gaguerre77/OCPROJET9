@@ -1,52 +1,24 @@
-name: Deploy and Validate Metadata
+name: ⚙️ Préparation de l'environnement Salesforce
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+  workflow_dispatch: # Permet de déclencher manuellement le workflow
 
 jobs:
-  sfdxvalidate:
+  setup-salesforce-cli:
+    name: 🛠️ Installer Salesforce CLI et sfdx-git-delta
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📦 Checkout source
+      - name: 📥 Récupération du code
         uses: actions/checkout@v4
+
+      - name: 🧰 Installation de Node.js
+        uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
+          node-version: "18.x"
 
-      - name: 🧰 Install Node.js, SFDX CLI, and sgd plugin
-        run: |
-          npm install -g sfdx-cli
-          sfdx --version
-          npm install -g sfdx-git-delta@3.3.0
+      - name: 📦 Installation du Salesforce CLI
+        run: npm install -g @salesforce/cli
 
-      - name: 🔐 Auth to Salesforce
-        run: |
-          echo "${{ secrets.SFDX_AUTH_URL }}" > auth_url.txt
-          sfdx auth:sfdxurl:store -f auth_url.txt -a deployOrg --setdefaultusername
-
-      - name: 🔄 Préparer Git pour delta
-        run: |
-          git fetch origin main
-
-      - name: ⚙️ Générer le delta avec sfdx-git-delta
-        run: |
-          mkdir -p .temp
-          sfdx sgd:source:delta --to HEAD --from origin/main --output .temp --generate-delta
-          echo "📂 Contenu du dossier .temp :"
-          ls -R .temp
-
-      - name: 🚀 Déploiement (Check Only + Tests)
-        if: github.ref == 'refs/heads/main'
-        run: |
-          if [ -f ".temp/package/package.xml" ]; then
-            echo "🚀 Déploiement en mode simulation avec exécution des tests..."
-            sfdx force:source:deploy -x .temp/package/package.xml -u deployOrg --checkonly --testlevel RunLocalTests --json > deploy-result.json
-            echo "📊 Rapport des tests Apex :"
-            sfdx force:apex:test:report --resultformat human --codecoverage --json > test-report.json || true
-            cat test-report.json
-          else
-            echo "⚠️ Aucun changement détecté, aucun déploiement nécessaire."
-          fi
+      - name: 🔌 Installation du plugin sfdx-git-delta
+        run: echo y | sf plugins install sfdx-git-delta
