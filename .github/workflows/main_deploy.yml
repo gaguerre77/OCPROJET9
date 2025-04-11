@@ -33,3 +33,8 @@ jobs:
 
       - name: 🔌 Installation du plugin sfdx-git-delta
         run: echo y | sf plugins install sfdx-git-delta
+
+      - name: 🔐 Authentification à Salesforce
+        run: sf org login sfdx-url --sfdx-url-env-var SFDX_AUTH_URL --alias mon-org --set-default
+        env:
+          SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
