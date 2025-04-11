@@ -9,8 +9,8 @@ on:
       - main
 
 jobs:
-  sfdxvalidate:
-    name: "Run SFDX Validate"
+  sfdx-deploy:
+    name: "Deploy to Sandbox"
     runs-on: ubuntu-latest
 
     strategy:
@@ -45,5 +45,19 @@ jobs:
           sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
 
       - name: 🧪 Exécution des tests Apex
+        run: |
+          sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format junit
+
+      - name: 🚀 Déploiement des métadonnées vers la sandbox
         if: github.ref == 'refs/heads/main'
-        run: sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format human
+        run: |
+          sf project deploy start \
+            --source-dir .sfdx-delta/force-app \
+            --target-org mon-org \
+            --test-level RunLocalTests \
+            --wait 10 \
+            --verbose \
+            --ignore-conflicts
+
+      - name: 🧹 Nettoyage du fichier d’auth
+        run: rm sfdx_auth.txt
