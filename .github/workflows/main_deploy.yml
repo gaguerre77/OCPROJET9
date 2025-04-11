@@ -1,24 +1,35 @@
-name: ⚙️ Préparation de l'environnement Salesforce
+name: ⚙️ Deploy and Validate Metadata
 
 on:
-  workflow_dispatch: # Permet de déclencher manuellement le workflow
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  setup-salesforce-cli:
-    name: 🛠️ Installer Salesforce CLI et sfdx-git-delta
+  sfdxvalidate:
+    name: "Run SFDX Validate"
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x]
 
     steps:
       - name: 📥 Récupération du code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: 🧰 Installation de Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "18.x"
+          node-version: ${{ matrix.node-version }}
 
       - name: 📦 Installation du Salesforce CLI
-        run: npm install -g @salesforce/cli
+        run: npm install -g @salesforce/cli@latest
 
       - name: 🔌 Installation du plugin sfdx-git-delta
         run: echo y | sf plugins install sfdx-git-delta
