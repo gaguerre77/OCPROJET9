@@ -48,17 +48,19 @@ jobs:
         run: |
           sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format junit
 
-      - name: 📂 Vérification du contenu du delta
+      - name: 📂 Vérification du contenu réel du delta
+        id: check-delta
         run: |
-          if [ -d ".sfdx-delta/force-app" ] && [ "$(ls -A .sfdx-delta/force-app)" ]; then
-            echo "✅ Des métadonnées ont été modifiées, préparation du déploiement."
+          NB_FILES=$(find .sfdx-delta/force-app -type f | wc -l)
+          if [ "$NB_FILES" -gt 0 ]; then
+            echo "✅ $NB_FILES fichier(s) trouvé(s) dans le delta. Préparation du déploiement."
           else
-            echo "⚠️ Aucun changement détecté dans force-app, aucun déploiement effectué."
-            exit 0
+            echo "⚠️ Aucun fichier détecté dans le delta. Aucun déploiement ne sera effectué."
+            echo "skip_deploy=true" >> $GITHUB_OUTPUT
           fi
 
       - name: 🚀 Déploiement des métadonnées vers la sandbox
-        if: github.ref == 'refs/heads/main' && hashFiles('.sfdx-delta/force-app/**') != ''
+        if: github.ref == 'refs/heads/main' && steps.check-delta.outputs.skip_deploy != 'true'
         run: |
           sf project deploy start \
             --source-dir .sfdx-delta/force-app \
