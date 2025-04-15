@@ -48,12 +48,7 @@ jobs:
         run: |
           sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format junit
 
-      - name: 🗂️ Lister les fichiers dans le delta
-        run: |
-          echo "🗂️ Contenu du delta généré :"
-          find .sfdx-delta/force-app -type f || echo "⚠️ Aucun fichier trouvé"
-
-      - name: 📂 Vérification du contenu réel et filtré du delta
+      - name: 📂 Vérification du contenu réel du delta
         id: check-delta
         run: |
           NB_DEPLOYABLE_FILES=$(find .sfdx-delta/force-app \( -name "*.cls" -o -name "*.trigger" -o -name "*.xml" -o -name "*.js" -o -name "*.html" \) | wc -l)
@@ -75,8 +70,7 @@ jobs:
             --test-level RunLocalTests \
             --wait 10 \
             --verbose \
-            --ignore-conflicts \
-            --force
+            --ignore-conflicts
 
       - name: 🧹 Nettoyage du fichier d’auth
         run: rm sfdx_auth.txt
