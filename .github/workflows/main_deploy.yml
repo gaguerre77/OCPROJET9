@@ -48,15 +48,22 @@ jobs:
         run: |
           sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format junit
 
-      - name: 📂 Vérification du contenu réel du delta
+      - name: 🗂️ Lister les fichiers dans le delta
+        run: |
+          echo "🗂️ Contenu du delta généré :"
+          find .sfdx-delta/force-app -type f || echo "⚠️ Aucun fichier trouvé"
+
+      - name: 📂 Vérification du contenu réel et filtré du delta
         id: check-delta
         run: |
-          NB_FILES=$(find .sfdx-delta/force-app -type f | wc -l)
-          if [ "$NB_FILES" -gt 0 ]; then
-            echo "✅ $NB_FILES fichier(s) trouvé(s) dans le delta. Préparation du déploiement."
-          else
-            echo "⚠️ Aucun fichier détecté dans le delta. Aucun déploiement ne sera effectué."
+          NB_DEPLOYABLE_FILES=$(find .sfdx-delta/force-app \( -name "*.cls" -o -name "*.xml" -o -name "*.js" -o -name "*.html" \) | wc -l)
+          echo "🧮 $NB_DEPLOYABLE_FILES fichier(s) déployable(s) détecté(s)"
+          if [ "$NB_DEPLOYABLE_FILES" -eq 0 ]; then
+            echo "❌ Aucun fichier déployable détecté. Fin du job."
             echo "skip_deploy=true" >> $GITHUB_OUTPUT
+            exit 1
+          else
+            echo "skip_deploy=false" >> $GITHUB_OUTPUT
           fi
 
       - name: 🚀 Déploiement des métadonnées vers la sandbox
