@@ -56,7 +56,7 @@ jobs:
       - name: 📂 Vérification du contenu réel et filtré du delta
         id: check-delta
         run: |
-          NB_DEPLOYABLE_FILES=$(find .sfdx-delta/force-app \( -name "*.cls" -o -name "*.xml" -o -name "*.js" -o -name "*.html" \) | wc -l)
+          NB_DEPLOYABLE_FILES=$(find .sfdx-delta/force-app \( -name "*.cls" -o -name "*.trigger" -o -name "*.xml" -o -name "*.js" -o -name "*.html" \) | wc -l)
           echo "🧮 $NB_DEPLOYABLE_FILES fichier(s) déployable(s) détecté(s)"
           if [ "$NB_DEPLOYABLE_FILES" -eq 0 ]; then
             echo "❌ Aucun fichier déployable détecté. Fin du job."
@@ -75,7 +75,8 @@ jobs:
             --test-level RunLocalTests \
             --wait 10 \
             --verbose \
-            --ignore-conflicts
+            --ignore-conflicts \
+            --force
 
       - name: 🧹 Nettoyage du fichier d’auth
         run: rm sfdx_auth.txt
