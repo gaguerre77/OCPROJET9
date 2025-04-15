@@ -25,27 +25,30 @@ jobs:
       - name: Install Salesforce CLI
         run: npm install -g @salesforce/cli@latest
 
-      - name: Auth to Salesforce Org
+      - name: Install sfdx-git-delta plugin
+        run: echo y | sf plugins install sfdx-git-delta
+
+      - name: Authenticate to Salesforce Org
         run: |
           echo "$SFDX_AUTH_URL" > sfdx_auth.txt
           sf org login sfdx-url --sfdx-url-file sfdx_auth.txt --alias mon-org --set-default
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
 
-      - name: Run Apex Tests
+      - name: Generate and show delta (for info only)
         run: |
-          sf apex run test \
-            --target-org mon-org \
-            --test-level RunLocalTests \
-            --output-dir test-results \
-            --result-format junit || true
+          mkdir -p .sfdx-delta
+          sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
+          echo "🗂️ Contenu du delta généré :"
+          find .sfdx-delta/force-app -type f || echo "⚠️ Aucun fichier trouvé"
 
-      - name: Force Full Deploy
+      - name: Force full deployment
         run: |
-          echo "🚀 Déploiement complet de force-app/"
+          echo "🚀 Déploiement complet de force-app..."
           sf project deploy start \
             --source-dir force-app \
             --target-org mon-org \
             --test-level RunLocalTests \
             --wait 10 \
-            --verbose
+            --verbose \
+            --ignore-conflicts
