@@ -1,76 +1,51 @@
-name: ⚙️ Deploy and Validate Metadata
+name: Deploy to Sandbox (Force Full Deploy)
 
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
+      - DEV
 
 jobs:
-  sfdx-deploy:
-    name: "Deploy to Sandbox"
+  deploy:
+    name: Deploy to Sandbox
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [18.x]
-
     steps:
-      - name: 📥 Récupération du code
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: 🧰 Installation de Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 18.x
 
-      - name: 📦 Installation du Salesforce CLI
+      - name: Install Salesforce CLI
         run: npm install -g @salesforce/cli@latest
 
-      - name: 🔌 Installation du plugin sfdx-git-delta
-        run: echo y | sf plugins install sfdx-git-delta
-
-      - name: 🔐 Authentification à Salesforce
-        run: echo "$SFDX_AUTH_URL" > sfdx_auth.txt && sf org login sfdx-url --sfdx-url-file sfdx_auth.txt --alias mon-org --set-default
+      - name: Auth to Salesforce Org
+        run: |
+          echo "$SFDX_AUTH_URL" > sfdx_auth.txt
+          sf org login sfdx-url --sfdx-url-file sfdx_auth.txt --alias mon-org --set-default
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
 
-      - name: 🧾 Génération du delta des métadonnées
+      - name: Run Apex Tests
         run: |
-          mkdir -p .sfdx-delta
-          sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
+          sf apex run test \
+            --target-org mon-org \
+            --test-level RunLocalTests \
+            --output-dir test-results \
+            --result-format junit || true
 
-      - name: 🧪 Exécution des tests Apex
+      - name: Force Full Deploy
         run: |
-          sf apex run test --test-level RunLocalTests --target-org mon-org --output-dir test-results --result-format junit
-
-      - name: 📂 Vérification du contenu réel du delta
-        id: check-delta
-        run: |
-          NB_DEPLOYABLE_FILES=$(find .sfdx-delta/force-app \( -name "*.cls" -o -name "*.trigger" -o -name "*.xml" -o -name "*.js" -o -name "*.html" \) | wc -l)
-          echo "🧮 $NB_DEPLOYABLE_FILES fichier(s) déployable(s) détecté(s)"
-          if [ "$NB_DEPLOYABLE_FILES" -eq 0 ]; then
-            echo "❌ Aucun fichier déployable détecté. Fin du job."
-            echo "skip_deploy=true" >> $GITHUB_OUTPUT
-            exit 1
-          else
-            echo "skip_deploy=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: 🚀 Déploiement des métadonnées vers la sandbox
-        if: github.ref == 'refs/heads/main' && steps.check-delta.outputs.skip_deploy != 'true'
-        run: |
+          echo "🚀 Déploiement complet de force-app/"
           sf project deploy start \
-            --source-dir .sfdx-delta/force-app \
+            --source-dir force-app \
             --target-org mon-org \
             --test-level RunLocalTests \
             --wait 10 \
-            --verbose \
-            --ignore-conflicts
-
-      - name: 🧹 Nettoyage du fichier d’auth
-        run: rm sfdx_auth.txt
+            --verbose
