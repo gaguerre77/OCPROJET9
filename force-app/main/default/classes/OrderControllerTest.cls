@@ -1,76 +1,87 @@
 @isTest
 public class OrderControllerTest {
   @isTest
-  static void testGetSumOrdersOfAccount_WithActivatedOrders() {
-    // Préparation des données
+  static void testGetSumOrdersOfAccount_ok() {
+    TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
+      1
+    );
+    Order toActivate = data.orders[0];
+
+    insert new OrderItem(
+      OrderId = toActivate.Id,
+      Quantity = 1,
+      UnitPrice = 100,
+      PricebookEntryId = data.pricebookEntryId
+    );
+
+    toActivate.Status = 'Activated';
+    update toActivate;
+
+    Decimal total = OrderController.getSumOrdersOfAccount(data.accountId);
+    System.assertEquals(
+      100,
+      total,
+      'Le total de la commande activée devrait être correct.'
+    );
+  }
+
+  @isTest
+  static void testGetSumOrdersOfAccount_multipleActivatedOrders() {
     TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
       2
     );
 
-    // Ajout d'OrderItems aux commandes créées
-    List<OrderItem> items = new List<OrderItem>();
-    for (Order ord : data.orders) {
-      items.add(
-        new OrderItem(
-          OrderId = ord.Id,
-          PricebookEntryId = data.pricebookEntryId,
-          Quantity = 2,
-          UnitPrice = 100
-        )
+    List<Order> toUpdate = new List<Order>();
+    for (Order o : data.orders) {
+      insert new OrderItem(
+        OrderId = o.Id,
+        Quantity = 1,
+        UnitPrice = 100,
+        PricebookEntryId = data.pricebookEntryId
       );
+      o.Status = 'Activated';
+      toUpdate.add(o);
     }
-    insert items;
+    update toUpdate;
 
-    // Activation de la première commande
-    Order toActivate = data.orders[0];
-    toActivate.Status = 'Activated';
-    update toActivate;
-
-    Test.startTest();
     Decimal total = OrderController.getSumOrdersOfAccount(data.accountId);
-    Test.stopTest();
-
-    System.debug('📊 Total retourné : ' + total);
     System.assertEquals(
-      200,
+      2 * 100,
       total,
-      'Le total devrait être égal à 200 pour une commande activée de 2 x 100.'
+      'Le total cumulé des commandes activées devrait être correct.'
     );
   }
 
   @isTest
-  static void testGetSumOrdersOfAccount_InvalidId() {
-    Boolean exceptionThrown = false;
+  static void testGetSumOrdersOfAccount_noActivatedOrders() {
+    TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
+      1
+    );
 
+    insert new OrderItem(
+      OrderId = data.orders[0].Id,
+      Quantity = 1,
+      UnitPrice = 100,
+      PricebookEntryId = data.pricebookEntryId
+    );
+
+    Decimal total = OrderController.getSumOrdersOfAccount(data.accountId);
+    System.assertEquals(0, total, 'Aucune commande activée => total = 0');
+  }
+
+  @isTest
+  static void testGetSumOrdersOfAccount_nullId_throwsException() {
     Test.startTest();
+    Boolean exceptionThrown = false;
     try {
       OrderController.getSumOrdersOfAccount(null);
-    } catch (Exception e) {
+    } catch (AuraHandledException e) {
       exceptionThrown = true;
-      System.debug('✅ Exception capturée : ' + e.getMessage());
     }
     Test.stopTest();
-
     System.assert(
       exceptionThrown,
-      'Une exception aurait dû être levée avec un ID null.'
-    );
-  }
-
-  @isTest
-  static void testGetSumOrdersOfAccount_EmptyResult() {
-    // Création d'un compte sans commande activée
-    Account acc = new Account(Name = 'Account without orders');
-    insert acc;
-
-    Test.startTest();
-    Decimal total = OrderController.getSumOrdersOfAccount(acc.Id);
-    Test.stopTest();
-
-    System.assertEquals(
-      0,
-      total,
-      'Le total doit être 0 si aucune commande activée n’est liée au compte.'
+      'L’exception AuraHandledException aurait dû être levée.'
     );
   }
 }
