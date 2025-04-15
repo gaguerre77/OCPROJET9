@@ -32,6 +32,20 @@ jobs:
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
 
-      - name: Run Tests
+      - name: Run Apex Tests
         run: |
-          sf apex run test --target-org mon
+          sf apex run test \
+            --target-org mon-org \
+            --test-level RunLocalTests \
+            --output-dir test-results \
+            --result-format junit || true
+
+      - name: Force Full Deploy
+        run: |
+          echo "🚀 Déploiement complet de force-app/"
+          sf project deploy start \
+            --source-dir force-app \
+            --target-org mon-org \
+            --test-level RunLocalTests \
+            --wait 10 \
+            --verbose
