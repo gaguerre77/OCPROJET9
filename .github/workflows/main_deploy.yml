@@ -3,7 +3,6 @@ name: ⚙️ Deploy and Validate Metadata
 on:
   push:
     branches:
-      - main
       - DEV
   pull_request:
     branches:
