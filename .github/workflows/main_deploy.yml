@@ -1,50 +1,82 @@
-name: Deploy to Sandbox (Force Full Deploy)
+name: ⚙️ Deploy and Validate Metadata
 
 on:
   push:
     branches:
       - main
       - DEV
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  deploy:
-    name: Deploy to Sandbox
+  sfdx-deploy:
+    name: "Deploy to Sandbox"
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        node-version: [18.x]
+
     steps:
-      - name: Checkout repository
+      - name: 📥 Récupération du code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
+      - name: 🧰 Installation de Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18.x
+          node-version: ${{ matrix.node-version }}
 
-      - name: Install Salesforce CLI
+      - name: 📦 Installation du Salesforce CLI
         run: npm install -g @salesforce/cli@latest
 
-      - name: Install sfdx-git-delta plugin
+      - name: 🔌 Installation du plugin sfdx-git-delta
         run: echo y | sf plugins install sfdx-git-delta
 
-      - name: Authenticate to Salesforce Org
+      - name: 🔐 Authentification à Salesforce
         run: |
           echo "$SFDX_AUTH_URL" > sfdx_auth.txt
           sf org login sfdx-url --sfdx-url-file sfdx_auth.txt --alias mon-org --set-default
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
 
-      - name: Generate and show delta (for info only)
+      # ✅ Delta uniquement pour DEV
+      - name: 🧾 Génération du delta des métadonnées
+        if: github.ref == 'refs/heads/DEV'
         run: |
           mkdir -p .sfdx-delta
           sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
-          echo "🗂️ Contenu du delta généré :"
-          find .sfdx-delta/force-app -type f || echo "⚠️ Aucun fichier trouvé"
 
-      - name: Force full deployment
+      - name: 📂 Vérification du contenu réel du delta
+        if: github.ref == 'refs/heads/DEV'
+        id: check-delta
         run: |
-          echo "🚀 Déploiement complet de force-app..."
+          NB_FILES=$(find .sfdx-delta/force-app -type f | wc -l)
+          if [ "$NB_FILES" -gt 0 ]; then
+            echo "✅ $NB_FILES fichier(s) trouvé(s) dans le delta."
+          else
+            echo "⚠️ Aucun fichier détecté dans le delta. Aucun déploiement ne sera effectué."
+            echo "skip_deploy=true" >> $GITHUB_OUTPUT
+          fi
+
+      # ✅ Déploiement delta pour DEV
+      - name: 🚀 Déploiement delta vers DEV
+        if: github.ref == 'refs/heads/DEV' && steps.check-delta.outputs.skip_deploy != 'true'
+        run: |
+          sf project deploy start \
+            --source-dir .sfdx-delta/force-app \
+            --target-org mon-org \
+            --test-level RunLocalTests \
+            --wait 10 \
+            --verbose \
+            --ignore-conflicts
+
+      # ✅ Déploiement full pour main
+      - name: 🚀 Déploiement complet vers main
+        if: github.ref == 'refs/heads/main'
+        run: |
           sf project deploy start \
             --source-dir force-app \
             --target-org mon-org \
@@ -52,3 +84,6 @@ jobs:
             --wait 10 \
             --verbose \
             --ignore-conflicts
+
+      - name: 🧹 Nettoyage du fichier d’auth
+        run: rm sfdx_auth.txt
