@@ -3,10 +3,8 @@ name: ⚙️ Deploy and Validate Metadata
 on:
   push:
     branches:
-      - DEV
-  pull_request:
-    branches:
       - main
+      - DEV
 
 jobs:
   sfdx-deploy:
@@ -41,7 +39,6 @@ jobs:
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
 
-      # ✅ Exécution des tests dans DEV (séparé du déploiement)
       - name: 🧪 Exécution des tests Apex dans DEV
         if: github.ref == 'refs/heads/DEV'
         run: |
@@ -51,7 +48,6 @@ jobs:
             --output-dir test-results \
             --result-format junit
 
-      # ✅ Delta uniquement pour DEV
       - name: 🧾 Génération du delta des métadonnées
         if: github.ref == 'refs/heads/DEV'
         run: |
@@ -60,19 +56,18 @@ jobs:
 
       - name: 📂 Vérification du contenu réel du delta
         if: github.ref == 'refs/heads/DEV'
-        id: check-delta
         run: |
           NB_FILES=$(find .sfdx-delta/force-app -type f | wc -l)
           if [ "$NB_FILES" -gt 0 ]; then
             echo "✅ $NB_FILES fichier(s) trouvé(s) dans le delta."
+            echo "skip_deploy=false" >> $GITHUB_ENV
           else
             echo "⚠️ Aucun fichier détecté dans le delta. Aucun déploiement ne sera effectué."
-            echo "skip_deploy=true" >> $GITHUB_OUTPUT
+            echo "skip_deploy=true" >> $GITHUB_ENV
           fi
 
-      # ✅ Déploiement delta pour DEV
       - name: 🚀 Déploiement delta vers DEV
-        if: github.ref == 'refs/heads/DEV' && steps.check-delta.outputs.skip_deploy != 'true'
+        if: github.ref == 'refs/heads/DEV' && env.skip_deploy != 'true'
         run: |
           sf project deploy start \
             --source-dir .sfdx-delta/force-app \
@@ -82,7 +77,6 @@ jobs:
             --verbose \
             --ignore-conflicts
 
-      # ✅ Déploiement full pour main
       - name: 🚀 Déploiement complet vers main
         if: github.ref == 'refs/heads/main'
         run: |
