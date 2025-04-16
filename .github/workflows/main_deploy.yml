@@ -1,4 +1,4 @@
-name: Deploy to Sandbox (Conditional)
+name: Deploy to Sandbox (Force Full Deploy)
 
 on:
   push:
@@ -32,37 +32,19 @@ jobs:
         run: |
           echo "$SFDX_AUTH_URL" > sfdx_auth.txt
           sf org login sfdx-url --sfdx-url-file sfdx_auth.txt --alias mon-org --set-default
-          rm -f sfdx_auth.txt
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
 
-      # Delta deploy uniquement pour la branche DEV
-      - name: Generate delta for DEV
-        if: github.ref == 'refs/heads/DEV'
+      - name: Generate and show delta (for info only)
         run: |
-          echo "🔍 Génération du delta pour DEV..."
           mkdir -p .sfdx-delta
           sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
           echo "🗂️ Contenu du delta généré :"
           find .sfdx-delta/force-app -type f || echo "⚠️ Aucun fichier trouvé"
 
-      - name: Deploy delta to Sandbox
-        if: github.ref == 'refs/heads/DEV'
+      - name: Force full deployment
         run: |
-          echo "🚀 Déploiement delta (DEV)..."
-          sf project deploy start \
-            --source-dir .sfdx-delta/force-app \
-            --target-org mon-org \
-            --test-level RunLocalTests \
-            --wait 10 \
-            --verbose \
-            --ignore-conflicts
-
-      # Full deploy uniquement pour la branche main
-      - name: Deploy full force-app to Sandbox
-        if: github.ref == 'refs/heads/main'
-        run: |
-          echo "🚀 Déploiement complet (main)..."
+          echo "🚀 Déploiement complet de force-app..."
           sf project deploy start \
             --source-dir force-app \
             --target-org mon-org \
