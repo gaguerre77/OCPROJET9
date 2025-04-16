@@ -3,7 +3,6 @@ name: ⚙️ Deploy and Validate Metadata
 on:
   push:
     branches:
-      - main
       - DEV
   pull_request:
     branches:
@@ -41,6 +40,16 @@ jobs:
           sf org login sfdx-url --sfdx-url-file sfdx_auth.txt --alias mon-org --set-default
         env:
           SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+
+      # ✅ Exécution des tests dans DEV (séparé du déploiement)
+      - name: 🧪 Exécution des tests Apex dans DEV
+        if: github.ref == 'refs/heads/DEV'
+        run: |
+          sf apex run test \
+            --target-org mon-org \
+            --test-level RunLocalTests \
+            --output-dir test-results \
+            --result-format junit
 
       # ✅ Delta uniquement pour DEV
       - name: 🧾 Génération du delta des métadonnées
