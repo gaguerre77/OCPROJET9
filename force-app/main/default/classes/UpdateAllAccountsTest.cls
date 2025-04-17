@@ -57,4 +57,50 @@ public class UpdateAllAccountsTest {
       );
     }
   }
+
+  @isTest
+  static void testBatchCumulatesCAForSameAccount() {
+    // 🧪 Créer 2 commandes pour le même compte
+    TestDataFactory.TestEntities data = TestDataFactory.createBaseDataWithDraftOrders(
+      2
+    );
+
+    // Ajouter des OrderItems à chaque commande
+    List<OrderItem> items = new List<OrderItem>();
+    for (Order o : data.orders) {
+      items.add(
+        new OrderItem(
+          OrderId = o.Id,
+          Quantity = 2,
+          PricebookEntryId = data.pricebookEntryId,
+          UnitPrice = 80
+        )
+      );
+    }
+    insert items;
+
+    // ✅ Activer les 2 commandes
+    for (Order o : data.orders) {
+      o.Status = 'Activated';
+    }
+    update data.orders;
+
+    // 🔄 Lancer le batch
+    Test.startTest();
+    UpdateAllAccounts batch = new UpdateAllAccounts();
+    Database.executeBatch(batch, 50);
+    Test.stopTest();
+
+    // ✅ Vérification : 2 commandes * 2 * 100 = 400
+    Account acc = [
+      SELECT Id, Chiffre_d_affaire__c
+      FROM Account
+      WHERE Id = :data.accountId
+    ];
+    System.assertEquals(
+      400,
+      acc.Chiffre_d_affaire__c,
+      '💥 Le CA cumulé sur plusieurs commandes activées est incorrect'
+    );
+  }
 }
