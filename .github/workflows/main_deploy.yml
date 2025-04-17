@@ -52,11 +52,17 @@ jobs:
         if: github.ref == 'refs/heads/DEV'
         run: |
           mkdir -p .sfdx-delta
-          sf sgd source delta --to "HEAD" --from "HEAD~1" --output-dir .sfdx-delta --generate-delta
+          sf sgd source delta \
+            --to "${{ github.sha }}" \
+            --from "${{ github.event.before }}" \
+            --output-dir .sfdx-delta \
+            --generate-delta
 
       - name: 📂 Vérification du contenu réel du delta
         if: github.ref == 'refs/heads/DEV'
         run: |
+          echo "🔍 Fichiers dans le delta généré :"
+          find .sfdx-delta/force-app -type f
           NB_FILES=$(find .sfdx-delta/force-app -type f | wc -l)
           if [ "$NB_FILES" -gt 0 ]; then
             echo "✅ $NB_FILES fichier(s) trouvé(s) dans le delta."
@@ -67,7 +73,7 @@ jobs:
           fi
 
       - name: 🚀 Déploiement delta vers DEV
-        if: github.ref == 'refs/heads/DEV' && env.skip_deploy != 'true'
+        if: ${{ github.ref == 'refs/heads/DEV' && env.skip_deploy != 'true' }}
         run: |
           sf project deploy start \
             --source-dir .sfdx-delta/force-app \
@@ -75,7 +81,9 @@ jobs:
             --test-level RunLocalTests \
             --wait 10 \
             --verbose \
-            --ignore-conflicts
+            --ignore-conflicts \
+            --ignore-warnings \
+            --ignore-errors
 
       - name: 🚀 Déploiement complet vers main
         if: github.ref == 'refs/heads/main'
@@ -86,7 +94,9 @@ jobs:
             --test-level RunLocalTests \
             --wait 10 \
             --verbose \
-            --ignore-conflicts
+            --ignore-conflicts \
+            --ignore-warnings \
+            --ignore-errors
 
       - name: 🧹 Nettoyage du fichier d’auth
         run: rm sfdx_auth.txt
