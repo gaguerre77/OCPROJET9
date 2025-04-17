@@ -70,13 +70,22 @@ jobs:
         if: github.ref == 'refs/heads/DEV'
         run: |
           if [ "$SKIP_DEPLOY" != "true" ]; then
+            echo "🚀 Déploiement en cours..."
             sf project deploy start \
               --source-dir .sfdx-delta/force-app \
               --target-org mon-org \
               --test-level RunLocalTests \
               --wait 10 \
               --verbose \
-              --ignore-conflicts
+              --ignore-conflicts 2> deploy-error.log || {
+                if grep -q "NothingToDeploy" deploy-error.log; then
+                  echo "✅ Aucun changement détecté à déployer."
+                else
+                  echo "❌ Erreur inattendue lors du déploiement."
+                  cat deploy-error.log
+                  exit 1
+                fi
+              }
           else
             echo "⏭️ Déploiement ignoré car aucun delta détecté."
           fi
