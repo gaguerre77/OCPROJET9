@@ -7,23 +7,23 @@ public with sharing class OrderController {
       throw new AuraHandledException('L\'ID du compte est requis.');
     }
 
-    try {
-      AggregateResult result = [
-        SELECT SUM(TotalAmount) sumTotal
-        FROM Order
-        WHERE AccountId = :accountId AND Status = 'Activated'
-      ];
+    //try {
+    AggregateResult result = [
+      SELECT SUM(TotalAmount) sumTotal
+      FROM Order
+      WHERE AccountId = :accountId AND Status = 'Activated'
+    ];
 
-      Decimal total = (Decimal) result.get('sumTotal');
-      System.debug('📊 [Apex] Total des commandes activées : ' + total);
+    Decimal total = (Decimal) result.get('sumTotal');
+    System.debug('📊 [Apex] Total des commandes activées : ' + total);
 
-      return total != null ? total : 0;
-    } catch (Exception e) {
-      System.debug('🔥 [Apex] Erreur : ' + e.getMessage());
-      throw new AuraHandledException(
-        'Erreur lors de la récupération du chiffre d\'affaire : ' +
-        e.getMessage()
-      );
-    }
+    return total != null ? total : 0;
+    //} catch (Exception e) {
+    //  System.debug('🔥 [Apex] Erreur : ' + e.getMessage());
+    //  throw new AuraHandledException(
+    //    'Erreur lors de la récupération du chiffre d\'affaire : ' +
+    //    e.getMessage()
+    //  );
+    //}
   }
 }
